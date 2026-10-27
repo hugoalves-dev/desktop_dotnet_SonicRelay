@@ -31,3 +31,5 @@ _ReSharper*/
 # OS files
 .DS_Store
 Thumbs.db
+
+.codex/
