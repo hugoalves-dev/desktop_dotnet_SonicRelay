@@ -3,8 +3,8 @@
 How the SonicRelay Windows publisher is packaged for the Microsoft Store, how to reproduce
 the package locally, and what has to be validated before uploading it to the Partner Center.
 
-Implements [issue #66](https://github.com/vitorhugo-dotnet/desktop_dotnet_SonicRelay/issues/66),
-a subtask of [dotnet_SonicRelay#43](https://github.com/vitorhugo-dotnet/dotnet_SonicRelay/issues/43).
+Implements [issue #66](https://github.com/hugoalves-dev/desktop_dotnet_SonicRelay/issues/66),
+a subtask of [dotnet_SonicRelay#43](https://github.com/hugoalves-dev/dotnet_RelayControl/issues/43).
 
 ## What is produced
 

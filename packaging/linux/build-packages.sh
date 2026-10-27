@@ -85,7 +85,7 @@ common_args=(
     --vendor SonicRelay
     --maintainer "SonicRelay <noreply@sonicrelay.invalid>"
     --description "SonicRelay Linux Publisher: capture desktop audio and stream it to SonicRelay viewers."
-    --url "https://github.com/vitorhugo-dotnet/windows_SonicRelay"
+    --url "https://github.com/hugoalves-dev/desktop_dotnet_SonicRelay"
     --after-install "$repo_root/packaging/linux/after-install.sh"
     --after-remove "$repo_root/packaging/linux/after-remove.sh"
     --chdir "$staging_dir"

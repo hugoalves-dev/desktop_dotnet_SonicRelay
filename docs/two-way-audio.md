@@ -1,6 +1,6 @@
 # Two-way audio (duplex sessions)
 
-Implements the desktop half of [dotnet_SonicRelay#22](https://github.com/vitorhugo-dotnet/dotnet_SonicRelay/issues/22).
+Implements the desktop half of [dotnet_SonicRelay#22](https://github.com/hugoalves-dev/dotnet_RelayControl/issues/22).
 
 **SonicRelay never captures a microphone.** What it shares — in every mode, in every
 direction — is the system/app audio mix: whatever the machine is playing. Two-way audio means
