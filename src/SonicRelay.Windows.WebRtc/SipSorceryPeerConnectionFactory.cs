@@ -14,7 +14,8 @@ public sealed class SipSorceryPeerConnectionFactory(
     IIceServersProvider iceServersProvider,
     Func<bool>? forceRelay = null,
     Func<AudioQualityProfile>? audioProfile = null,
-    Func<WebRtcAudioDirection>? audioDirection = null) : IWebRtcPeerConnectionFactory
+    Func<WebRtcAudioDirection>? audioDirection = null,
+    Func<bool>? useLanOnly = null) : IWebRtcPeerConnectionFactory
 {
     private readonly IIceServersProvider iceServersProvider =
         iceServersProvider ?? throw new ArgumentNullException(nameof(iceServersProvider));
@@ -32,6 +33,9 @@ public sealed class SipSorceryPeerConnectionFactory(
     private readonly Func<WebRtcAudioDirection> audioDirection =
         audioDirection ?? (() => WebRtcAudioDirection.SendOnly);
 
+    // This flag must come from the authenticated session transport, never untrusted discovery.
+    private readonly Func<bool> useLanOnly = useLanOnly ?? (() => false);
+
     public async Task<IWebRtcPeerConnection> CreateAsync(
         string viewerId,
         WebRtcPublisherOptions options,
@@ -40,8 +44,13 @@ public sealed class SipSorceryPeerConnectionFactory(
         ArgumentException.ThrowIfNullOrWhiteSpace(viewerId);
         ArgumentNullException.ThrowIfNull(options);
 
-        var servers = await ResolveIceServersAsync(options, cancellationToken).ConfigureAwait(false);
-        var configuration = BuildConfiguration(servers, forceRelay());
+        // In LAN-only mode do not even query the API-backed provider: besides avoiding
+        // STUN/TURN traffic this prevents an offline session from depending on RelayControl.
+        var lanOnly = useLanOnly();
+        var servers = lanOnly
+            ? Array.Empty<WebRtcIceServer>()
+            : await ResolveIceServersAsync(options, cancellationToken).ConfigureAwait(false);
+        var configuration = BuildConfiguration(servers, forceRelay: !lanOnly && forceRelay(), lanOnly);
         return new SipSorceryPeerConnection(
             viewerId,
             new RTCPeerConnection(configuration),
@@ -54,11 +63,13 @@ public sealed class SipSorceryPeerConnectionFactory(
     /// transport policy is <c>relay</c> (TURN only); otherwise <c>all</c> permits
     /// direct host/srflx candidates. Exposed for testing the policy mapping.
     /// </summary>
-    public static RTCConfiguration BuildConfiguration(IReadOnlyList<WebRtcIceServer> servers, bool forceRelay) =>
+    public static RTCConfiguration BuildConfiguration(IReadOnlyList<WebRtcIceServer> servers, bool forceRelay, bool lanOnly = false) =>
         new()
         {
-            iceServers = MapIceServers(servers),
-            iceTransportPolicy = forceRelay ? RTCIceTransportPolicy.relay : RTCIceTransportPolicy.all,
+            // Ignore accidentally supplied STUN/TURN entries when LAN-only is selected.
+            iceServers = lanOnly ? [] : MapIceServers(servers),
+            iceTransportPolicy = lanOnly ? RTCIceTransportPolicy.all :
+                forceRelay ? RTCIceTransportPolicy.relay : RTCIceTransportPolicy.all,
         };
 
     private async Task<IReadOnlyList<WebRtcIceServer>> ResolveIceServersAsync(
