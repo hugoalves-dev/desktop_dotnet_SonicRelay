@@ -28,4 +28,39 @@ public sealed class SipSorceryPeerConnectionFactoryTests
         // TURN credentials are still carried so relay can actually connect.
         Assert.Equal("secret", Assert.Single(config.iceServers).credential);
     }
+    [Fact]
+    public void BuildConfigurationLanOnlyIgnoresTurnServersEvenIfForceRelayWasSelected()
+    {
+        var config = SipSorceryPeerConnectionFactory.BuildConfiguration(
+            Servers, forceRelay: true, lanOnly: true);
+
+        Assert.Equal(RTCIceTransportPolicy.all, config.iceTransportPolicy);
+        Assert.Empty(config.iceServers);
+    }
+
+    [Fact]
+    public async Task LanOnlyNeverCallsTheIceServerProvider()
+    {
+        var provider = new FailingIceServersProvider();
+        var factory = new SipSorceryPeerConnectionFactory(
+            provider, forceRelay: () => true, useLanOnly: () => true);
+
+        await using var peer = await factory.CreateAsync(
+            "local-viewer", new WebRtcPublisherOptions(Servers));
+
+        Assert.NotNull(peer);
+        Assert.Equal(0, provider.Calls);
+    }
+
+    private sealed class FailingIceServersProvider : IIceServersProvider
+    {
+        public int Calls { get; private set; }
+
+        public Task<IReadOnlyList<WebRtcIceServer>> GetIceServersAsync(
+            CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            throw new InvalidOperationException("LAN must not use RelayControl.");
+        }
+    }
 }
