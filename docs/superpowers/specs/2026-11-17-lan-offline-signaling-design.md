@@ -195,10 +195,11 @@ PublisherWorkflow ──► ISessionHost ──┬─ CloudSessionHost  (wraps I
                        └─ .Signaling : ISignalingClient ──► WebRtcPublisher (unchanged)
 ```
 
-- `ISessionHost`: `CreateSessionAsync(mode)`, `EndSessionAsync`, `GetParticipantsAsync`,
-  `SetAudioPermissionAsync`, `Signaling`, `Kind` (Cloud | Lan | Dual) and `ViewerOrigin(viewerId)`.
-  `PublisherWorkflow` swaps `ISessionApiClient` + `ISignalingClient` for `ISessionHost`; behaviour
-  for cloud is byte-identical (covered by the existing workflow tests).
+- `ISessionHost` is a composition-level pair `{ ISessionApiClient Sessions, ISignalingClient
+  Signaling, SessionHostKind Kind, SignalingOrigin OriginOf(viewerId) }`. Each host supplies its own
+  `ISessionApiClient` (the LAN one keeps sessions, participants and audio permissions in memory),
+  so `PublisherWorkflow` keeps its constructor and cloud behaviour is byte-identical (covered by the
+  existing workflow tests). The only workflow addition is `InitializeLocalIdentityAsync` (6.11).
 - `LanSignalingHub` turns accepted sockets into `ISignalingClient` events and **emulates the
   backend roles**: after auth + `viewer.ready` it emits `session.joined` with the viewer's stable
   device id as participant id; it is the authority for `participant.capabilities` (viewers start
