@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Kestrel hosts the authenticated LAN signaling endpoint (issue #75): non-admin on any
+         port, hardened HTTP/WebSocket parsing and TLS with an in-memory certificate. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../SonicRelay.Windows.ApiClient/SonicRelay.Windows.ApiClient.csproj" />
+    <ProjectReference Include="../SonicRelay.Windows.Core/SonicRelay.Windows.Core.csproj" />
+    <ProjectReference Include="../SonicRelay.Windows.Signaling/SonicRelay.Windows.Signaling.csproj" />
+  </ItemGroup>
+</Project>
