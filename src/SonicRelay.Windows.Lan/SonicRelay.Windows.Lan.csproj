@@ -6,6 +6,8 @@
     <!-- Kestrel hosts the authenticated LAN signaling endpoint (issue #75): non-admin on any
          port, hardened HTTP/WebSocket parsing and TLS with an in-memory certificate. -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <!-- DNS-SD announce/browse. Same version SIPSorcery already resolves for ICE mDNS. -->
+    <PackageReference Include="Makaretu.Dns.Multicast" Version="0.27.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../SonicRelay.Windows.ApiClient/SonicRelay.Windows.ApiClient.csproj" />
