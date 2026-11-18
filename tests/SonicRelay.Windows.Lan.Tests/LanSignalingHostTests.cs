@@ -46,7 +46,9 @@ public sealed class LanSignalingHostTests : IAsyncLifetime
     })
     { BaseAddress = BaseUri };
 
-    private static object PairBody(LanPairingWindow window, string viewer = "viewer-1") => new
+    private const string ViewerOne = "11111111-1111-1111-1111-111111111111";
+
+    private static object PairBody(LanPairingWindow window, string viewer = ViewerOne) => new
     {
         pid = window.PairingId,
         sec = System.Buffers.Text.Base64Url.EncodeToString(window.Secret),
@@ -91,7 +93,7 @@ public sealed class LanSignalingHostTests : IAsyncLifetime
         Assert.Equal(identity.PublisherDeviceId.ToString("D"), body.GetProperty("publisherDeviceId").GetString());
         Assert.Equal("DESKTOP-01", body.GetProperty("publisherName").GetString());
         Assert.Equal(identity.Pin, body.GetProperty("pin").GetString());
-        Assert.NotNull(trust.Authenticate("viewer-1", credential));
+        Assert.NotNull(trust.Authenticate(ViewerOne, credential));
     }
 
     [Fact]
@@ -101,11 +103,11 @@ public sealed class LanSignalingHostTests : IAsyncLifetime
         using var client = Client();
         await client.PostAsJsonAsync("lan/v1/pair", PairBody(window));
 
-        var replay = await client.PostAsJsonAsync("lan/v1/pair", PairBody(window, "attacker"));
+        var replay = await client.PostAsJsonAsync("lan/v1/pair", PairBody(window, "22222222-2222-2222-2222-222222222222"));
 
         Assert.Equal(HttpStatusCode.BadRequest, replay.StatusCode);
         Assert.Contains("pairing_invalid", await replay.Content.ReadAsStringAsync());
-        Assert.Null(trust.Devices.SingleOrDefault(device => device.ViewerDeviceId == "attacker"));
+        Assert.Null(trust.Devices.SingleOrDefault(device => device.ViewerDeviceId == "22222222-2222-2222-2222-222222222222"));
     }
 
     [Fact]
@@ -135,6 +137,18 @@ public sealed class LanSignalingHostTests : IAsyncLifetime
         time.Advance(TimeSpan.FromSeconds(61));
         var allowed = await client.PostAsJsonAsync("lan/v1/pair", PairBody(pairing.Open()));
         Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
+    }
+
+    [Fact]
+    public async Task Pair_NonGuidViewerId_Returns400()
+    {
+        var window = pairing.Open();
+        using var client = Client();
+
+        var response = await client.PostAsJsonAsync("lan/v1/pair", PairBody(window, "not-a-guid"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(trust.Devices);
     }
 
     [Fact]

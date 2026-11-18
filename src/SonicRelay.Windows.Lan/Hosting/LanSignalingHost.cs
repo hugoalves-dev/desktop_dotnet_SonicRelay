@@ -265,8 +265,8 @@ public sealed class LanSignalingHost(
     private sealed record PairRequest(Guid? Pid, string? Sec, string? Code, string? ViewerDeviceId, string? ViewerName, string? Platform)
     {
         public bool IsWellFormed() =>
-            !string.IsNullOrWhiteSpace(ViewerDeviceId)
-            && ViewerDeviceId.Length <= MaxFieldLength
+            // A GUID, like every participant id the session API exposes.
+            Guid.TryParseExact(ViewerDeviceId, "D", out _)
             && (ViewerName?.Length ?? 0) <= MaxFieldLength
             && (Platform?.Length ?? 0) <= MaxFieldLength
             && ((Pid is not null && Sec is not null) || Code is not null);
