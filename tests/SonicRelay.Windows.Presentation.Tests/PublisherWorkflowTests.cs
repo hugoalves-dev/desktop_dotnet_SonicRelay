@@ -315,6 +315,21 @@ public sealed class PublisherWorkflowTests
         Assert.True(fixture.Workflow.State.CanCreateSession);
     }
 
+    [Fact]
+    public async Task Workflow_LocalIdentity_AllowsCreateSession_WithoutCloudBootstrap()
+    {
+        await using var fixture = new DeviceIdentityFixture();
+        var lanId = Guid.Parse("8f14e45f-ceea-467e-9b4a-1f3a2b6c7d8e");
+
+        await fixture.Workflow.InitializeLocalIdentityAsync(lanId);
+        await fixture.Workflow.CreateSessionAsync();
+
+        Assert.True(fixture.Workflow.State.IsAuthenticated);
+        Assert.Equal(lanId, fixture.Workflow.State.DeviceId);
+        Assert.NotNull(fixture.Workflow.State.SessionId);
+        Assert.Equal(0, fixture.Identity.TokenRequests);
+    }
+
     private static PublisherWorkflow CreateWorkflow(IPairingApiClient pairings)
     {
         var credential = new DeviceCredential(

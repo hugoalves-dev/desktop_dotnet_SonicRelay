@@ -107,6 +107,23 @@ public sealed class PublisherWorkflow : IAsyncDisposable
         }, cancellationToken);
 
     /// <summary>
+    /// Marks this publisher ready using its LAN identity only (issue #75), for <c>lanOnly</c> and
+    /// for <c>auto</c> when RelayControl is unreachable. No backend call is made; cloud pairing
+    /// stays unavailable until a later cloud bootstrap succeeds.
+    /// </summary>
+    public Task InitializeLocalIdentityAsync(Guid publisherDeviceId, CancellationToken cancellationToken = default) =>
+        ExecuteAsync(_ =>
+        {
+            SetState(state => state with
+            {
+                IsAuthenticated = true,
+                DeviceId = publisherDeviceId,
+                DeviceName = Environment.MachineName
+            }, "Publisher is ready for local network sessions.");
+            return Task.CompletedTask;
+        }, cancellationToken);
+
+    /// <summary>
     /// Creates a session. <paramref name="duplex"/> opens it so both sides share their system
     /// audio with each other instead of only this one publishing — a mode the backend fixes at
     /// creation and never changes. A build that cannot play incoming audio refuses rather than
