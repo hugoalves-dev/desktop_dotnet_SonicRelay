@@ -8,7 +8,6 @@ public interface IPublisherSessionControl
     Task CreateSessionAsync(bool duplex = false, CancellationToken cancellationToken = default);
     Task StartAudioAsync(CancellationToken cancellationToken = default);
     Task RotateCodeAsync(CancellationToken cancellationToken = default);
-    Task EndSessionAsync(CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -29,6 +28,7 @@ public sealed class SessionAutoStarter : IDisposable
 {
     private static readonly TimeSpan RotationMargin = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan ViewerRecheck = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan RotationRetry = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan[] RecreateDelays =
         [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(5)];
 
@@ -41,7 +41,6 @@ public sealed class SessionAutoStarter : IDisposable
     private int failedCreates;
     private bool started;
     private bool userEnded;
-    private bool releasing;
 
     public SessionAutoStarter(IPublisherSessionControl workflow, Func<bool> enabled, TimeProvider time)
     {
@@ -116,18 +115,19 @@ public sealed class SessionAutoStarter : IDisposable
 
         var previousExpiry = state.CodeExpiresAt;
         await workflow.RotateCodeAsync();
+        // A session the backend reports gone is released by the workflow, which reaches
+        // OnStateChanged and recreates it. Anything else is treated as transient and retried:
+        // never end the session from here, since ViewerCount can be stale and a phone may be
+        // listening.
+        if (workflow.State.SessionId != managedSessionId) return;
         if (workflow.State.CodeExpiresAt != previousExpiry)
         {
             ScheduleRotation();
             return;
         }
 
-        // The backend refused (typically 409: the session already ended). Release it locally
-        // and let the drop handling create a fresh one.
-        releasing = true;
-        try { await workflow.EndSessionAsync(); }
-        finally { releasing = false; }
-        HandleDrop();
+        rotationTimer?.Dispose();
+        rotationTimer = time.CreateTimer(_ => _ = RotateAsync(), null, RotationRetry, Timeout.InfiniteTimeSpan);
     }
 
     private void OnStateChanged(PublisherSnapshot state)
@@ -139,7 +139,7 @@ public sealed class SessionAutoStarter : IDisposable
             NotifyUserEndedSession();
             return;
         }
-        if (releasing || managedSessionId is null || state.SessionId == managedSessionId) return;
+        if (managedSessionId is null || state.SessionId == managedSessionId) return;
         HandleDrop();
     }
 

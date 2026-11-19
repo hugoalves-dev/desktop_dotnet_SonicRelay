@@ -80,14 +80,31 @@ public sealed class SessionAutoStarterTests
     }
 
     [Fact]
-    public async Task A_failed_rotation_releases_the_session_and_recreates_it()
+    public async Task A_transient_rotation_failure_is_retried_and_never_ends_the_session()
     {
+        // ViewerCount can be stale, so a phone may be listening: never tear the session down.
         var (control, time, starter) = Create();
         await starter.OnIdentityReadyAsync();
+        var sessionId = control.State.SessionId;
         control.RotationFails = true;
 
         time.Advance(TimeSpan.FromMinutes(9));
-        Assert.Equal(1, control.Ends);
+        Assert.Equal(1, control.Rotations);
+        time.Advance(TimeSpan.FromSeconds(30));
+
+        Assert.Equal(2, control.Rotations);
+        Assert.Equal(sessionId, control.State.SessionId);
+        Assert.Equal(1, control.Creates);
+    }
+
+    [Fact]
+    public async Task A_rotation_that_finds_the_session_gone_recreates_it()
+    {
+        var (control, time, starter) = Create();
+        await starter.OnIdentityReadyAsync();
+        control.RotationReportsSessionGone = true;
+
+        time.Advance(TimeSpan.FromMinutes(9));
         time.Advance(TimeSpan.FromSeconds(5));
 
         Assert.Equal(2, control.Creates);
@@ -181,7 +198,6 @@ public sealed class SessionAutoStarterTests
         public int Creates { get; private set; }
         public int AudioStarts { get; private set; }
         public int Rotations { get; private set; }
-        public int Ends { get; private set; }
         public bool CreateFails { get; set; }
         public bool AudioFails { get; set; }
         public bool RotationFails { get; set; }
@@ -216,19 +232,16 @@ public sealed class SessionAutoStarterTests
             return Task.CompletedTask;
         }
 
+        public bool RotationReportsSessionGone { get; set; }
+
         public Task RotateCodeAsync(CancellationToken cancellationToken = default)
         {
             Rotations++;
-            Set(RotationFails
-                ? State with { ErrorMessage = "409" }
+            // The workflow releases the session itself only when the backend says it is gone.
+            if (RotationReportsSessionGone) DropSession();
+            else Set(RotationFails
+                ? State with { ErrorMessage = "backend unavailable" }
                 : State with { CodeExpiresAt = time.GetUtcNow().AddMinutes(10) });
-            return Task.CompletedTask;
-        }
-
-        public Task EndSessionAsync(CancellationToken cancellationToken = default)
-        {
-            Ends++;
-            DropSession();
             return Task.CompletedTask;
         }
     }

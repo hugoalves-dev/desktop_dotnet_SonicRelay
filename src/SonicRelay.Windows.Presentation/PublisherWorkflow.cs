@@ -1,3 +1,4 @@
+using System.Net;
 using SonicRelay.Windows.ApiClient.Errors;
 using SonicRelay.Windows.ApiClient.Pairing;
 using SonicRelay.Windows.ApiClient.Sessions;
@@ -170,7 +171,22 @@ public sealed class PublisherWorkflow : IAsyncDisposable, IPublisherSessionContr
         if (State.SessionId is null) return SetValidationErrorAsync("There is no active session to rotate.");
         return ExecuteAsync(async token =>
         {
-            var rotated = await sessions.RotateCodeAsync(State.SessionId.Value, token);
+            StreamSessionResponse rotated;
+            try
+            {
+                rotated = await sessions.RotateCodeAsync(State.SessionId.Value, token);
+            }
+            catch (ApiClientException exception) when (
+                exception.Kind == ApiErrorKind.Conflict || exception.StatusCode == HttpStatusCode.NotFound)
+            {
+                // 409/404: the backend has definitively ended or forgotten this session.
+                // Release it locally, exactly like signaling reporting it gone; any other
+                // failure is transient and leaves the (possibly still listened-to) session alone.
+                await signaling.CloseAsync(token);
+                SetState(state => state with { SessionId = null, SessionCode = null, CodeExpiresAt = null, ViewerCount = 0 },
+                    "The session no longer exists on the backend.");
+                return;
+            }
             SetState(
                 state => state with { SessionCode = rotated.Code, CodeExpiresAt = rotated.CodeExpiresAt },
                 "Session code renewed.");

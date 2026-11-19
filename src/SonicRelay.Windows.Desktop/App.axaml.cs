@@ -49,10 +49,19 @@ public partial class App : Application
                 viewModel.LogDiagnostic("tray", "Tray integration unavailable; closing the window will exit normally instead of minimizing to tray.");
             }
 
-            // Launched at sign-in: start minimized. Set after the tray controller subscribes,
-            // so with a tray the window is hidden there exactly like a manual minimize.
+            // Launched at sign-in: start minimized. Applied once the window has first opened:
+            // the desktop lifetime shows MainWindow after this method returns, so hiding it
+            // any earlier would be undone by that Show(). With a tray, minimizing hides the
+            // window there exactly like a manual minimize.
             if (StartupArguments.RequestsMinimized(desktop.Args ?? []))
-                mainWindow.WindowState = WindowState.Minimized;
+            {
+                void MinimizeOnFirstOpen(object? sender, EventArgs e)
+                {
+                    mainWindow.Opened -= MinimizeOnFirstOpen;
+                    mainWindow.WindowState = WindowState.Minimized;
+                }
+                mainWindow.Opened += MinimizeOnFirstOpen;
+            }
 
             if (IsSupportedPlatform)
                 _ = AttachConfiguredRuntimeAsync(viewModel);

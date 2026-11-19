@@ -78,6 +78,34 @@ public sealed class PublisherWorkflowTests
     }
 
     [Fact]
+    public async Task RotateCodeReleasesASessionTheBackendReportsEnded()
+    {
+        await using var fixture = new DeviceIdentityFixture();
+        await fixture.Workflow.InitializeDeviceIdentityAsync();
+        await fixture.Workflow.CreateSessionAsync();
+        fixture.Sessions.RotateException = new ApiClientException(ApiErrorKind.Conflict, "ended", HttpStatusCode.Conflict);
+
+        await fixture.Workflow.RotateCodeAsync();
+
+        Assert.Null(fixture.Workflow.State.SessionId);
+    }
+
+    [Fact]
+    public async Task RotateCodeKeepsTheSessionOnATransientFailure()
+    {
+        await using var fixture = new DeviceIdentityFixture();
+        await fixture.Workflow.InitializeDeviceIdentityAsync();
+        await fixture.Workflow.CreateSessionAsync();
+        var sessionId = fixture.Workflow.State.SessionId;
+        fixture.Sessions.RotateException = new ApiClientException(ApiErrorKind.BackendUnavailable, "503", HttpStatusCode.ServiceUnavailable);
+
+        await fixture.Workflow.RotateCodeAsync();
+
+        Assert.Equal(sessionId, fixture.Workflow.State.SessionId);
+        Assert.NotNull(fixture.Workflow.State.ErrorMessage);
+    }
+
+    [Fact]
     public async Task RotateCodeWithoutSessionIsRejected()
     {
         await using var fixture = new DeviceIdentityFixture();
@@ -474,9 +502,12 @@ public sealed class PublisherWorkflowTests
         public Guid? RotatedId { get; private set; }
         public DateTimeOffset RotatedExpiry { get; } = DateTimeOffset.UtcNow.AddMinutes(10);
 
+        public Exception? RotateException { get; set; }
+
         public Task<StreamSessionResponse> RotateCodeAsync(Guid sessionId, CancellationToken cancellationToken = default)
         {
             RotatedId = sessionId;
+            if (RotateException is not null) return Task.FromException<StreamSessionResponse>(RotateException);
             return Task.FromResult(Created with { Id = sessionId, Code = "NEW456", CodeExpiresAt = RotatedExpiry });
         }
     }
