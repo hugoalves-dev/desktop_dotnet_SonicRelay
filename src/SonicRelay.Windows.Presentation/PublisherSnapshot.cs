@@ -11,6 +11,10 @@ public sealed record PublisherSnapshot
     public string? DeviceName { get; init; }
     public Guid? SessionId { get; init; }
     public string? SessionCode { get; init; }
+
+    /// <summary>When <see cref="SessionCode"/> stops admitting viewers (and a session still
+    /// waiting for its first viewer expires).</summary>
+    public DateTimeOffset? CodeExpiresAt { get; init; }
     public int ViewerCount { get; init; }
     public SignalingConnectionState SignalingState { get; init; } = SignalingConnectionState.Disconnected;
     public AudioCaptureState AudioState { get; init; } = AudioCaptureState.Stopped;

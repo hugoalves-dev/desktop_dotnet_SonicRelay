@@ -55,4 +55,14 @@ public sealed class SessionApiClient(
             null,
             true,
             cancellationToken);
+
+    public Task<StreamSessionResponse> RotateCodeAsync(
+        Guid sessionId,
+        CancellationToken cancellationToken = default) =>
+        _api.SendAsync<StreamSessionResponse>(
+            HttpMethod.Post,
+            $"/api/sessions/{sessionId:D}/rotate-code",
+            null,
+            true,
+            cancellationToken);
 }

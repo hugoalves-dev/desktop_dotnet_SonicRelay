@@ -33,6 +33,13 @@ public interface ISessionApiClient
     Task<StreamSessionResponse> EndSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Issues a new join code for a live session and extends <c>CodeExpiresAt</c>. A session
+    /// still waiting for its first viewer expires with its code, so this is also what keeps
+    /// an unattended session alive. <c>409</c> once the session has ended or expired.
+    /// </summary>
+    Task<StreamSessionResponse> RotateCodeAsync(Guid sessionId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Returns the session mode plus every participant's presence and audio capabilities.
     /// This is the authoritative view of who may publish audio — the WebSocket broadcasts
     /// carry the same state, and neither can be raised by a client.

@@ -1,4 +1,5 @@
 using Avalonia.Threading;
+using SonicRelay.Windows.Core.Configuration;
 using SonicRelay.Windows.Presentation;
 using SonicRelay.Windows.Presentation.Pairing;
 using SonicRelay.Windows.WebRtc;
@@ -27,6 +28,9 @@ public sealed class MainWindowViewModel : ViewModelBase
     private string? diagnosticsActionMessage;
     private bool hasDeviceIdentity;
     private bool pairingHeldByUnpair;
+    private PublisherStartupPreferenceStore? startupPreferences;
+    private StartupSettingsViewModel? startup;
+    private SessionAutoStarter? autoStarter;
 
     public MainWindowViewModel()
     {
@@ -46,7 +50,14 @@ public sealed class MainWindowViewModel : ViewModelBase
             () => ShellCommandAvailability.CreateSession(snapshot, HasWorkflow));
         StartAudioCommand = new RelayCommand(() => Run(w => w.StartAudioAsync()), () => ShellCommandAvailability.StartAudio(snapshot, HasWorkflow));
         StopAudioCommand = new RelayCommand(() => Run(w => w.StopAudioAsync()), () => ShellCommandAvailability.StopAudio(snapshot, HasWorkflow));
-        EndSessionCommand = new RelayCommand(() => Run(w => w.EndSessionAsync()), () => ShellCommandAvailability.EndSession(snapshot, HasWorkflow));
+        EndSessionCommand = new RelayCommand(
+            () => Run(w =>
+            {
+                // Tell the auto-starter first, so the user's own end is not treated as a drop.
+                autoStarter?.NotifyUserEndedSession();
+                return w.EndSessionAsync();
+            }),
+            () => ShellCommandAvailability.EndSession(snapshot, HasWorkflow));
         RetryCommand = new RelayCommand(() => Run(w => w.ReconnectSignalingAsync()), () => ShellCommandAvailability.Retry(snapshot, Shell.Capabilities, HasWorkflow));
         UnpairCommand = new RelayCommand(UnpairAsync, () => ShellCommandAvailability.Unpair(snapshot, Shell.Capabilities, HasWorkflow));
         ExportDiagnosticsCommand = new RelayCommand(ExportDiagnosticsAsync, () => runtime is not null);
@@ -267,11 +278,38 @@ public sealed class MainWindowViewModel : ViewModelBase
         Audio = next is null
             ? new AudioPageViewModel()
             : new AudioPageViewModel(next.AudioCapture, next.AudioOutput, next.Workflow);
+        Settings.Startup = startup;
+        RecreateAutoStarter();
         RaisePropertyChanged(nameof(Settings));
         RaisePropertyChanged(nameof(Audio));
 
         snapshot = workflow?.State;
         Rebuild();
+    }
+
+    /// <summary>
+    /// Wires the startup options (launch at sign-in, start streaming on launch). Called once by
+    /// the app at startup; kept out of the constructor so tests and previews never touch the
+    /// user's real startup configuration.
+    /// </summary>
+    public void ConfigureStartup(PublisherStartupPreferenceStore preferences, StartupSettingsViewModel settings)
+    {
+        startupPreferences = preferences;
+        startup = settings;
+        Settings.Startup = settings;
+        RecreateAutoStarter();
+    }
+
+    /// <summary>Starts streaming if the user enabled it; call once device identity is ready.</summary>
+    public Task StartSessionIfConfiguredAsync() => autoStarter?.OnIdentityReadyAsync() ?? Task.CompletedTask;
+
+    private void RecreateAutoStarter()
+    {
+        autoStarter?.Dispose();
+        var preferences = startupPreferences;
+        autoStarter = workflow is null || preferences is null
+            ? null
+            : new SessionAutoStarter(workflow, () => preferences.StartSessionOnLaunch, TimeProvider.System);
     }
 
     private void OnStateChanged(PublisherSnapshot state) => Dispatch(() => { snapshot = state; Rebuild(); });
@@ -343,6 +381,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         }
 
         DisarmUnpair();
+        autoStarter?.NotifyUserEndedSession();
         await workflow.UnpairAsync();
         SelectedNavigation = Navigation.Single(item => item.Key == PageKey.Pairing);
         pairingHeldByUnpair = true;
