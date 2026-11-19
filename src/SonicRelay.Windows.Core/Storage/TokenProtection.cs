@@ -15,6 +15,12 @@ public interface ITokenProtector
     byte[] Unprotect(byte[] ciphertext);
 }
 
+/// <summary>The platform protector used for user-scoped secrets at rest (DPAPI on Windows).</summary>
+public static class TokenProtectors
+{
+    public static ITokenProtector CreateDefault() => new WindowsDpapiTokenProtector();
+}
+
 public sealed class SecureStorageUnavailableException(string message, Exception? innerException = null)
     : Exception(message, innerException);
 

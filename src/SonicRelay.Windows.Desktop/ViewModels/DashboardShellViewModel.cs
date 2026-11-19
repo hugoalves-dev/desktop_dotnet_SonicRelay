@@ -119,8 +119,19 @@ public sealed class DashboardShellViewModel : ViewModelBase
     /// carries the prior UI state so <see cref="PublisherUiStateResolver"/> can distinguish
     /// "session ended" from "never started".
     /// </summary>
+    /// <summary>Which transport carried a viewer's signaling (issue #75); cloud when unset.</summary>
+    public Func<string, SignalingOrigin>? OriginOf { get; set; }
+
+    /// <summary>
+    /// The path the viewers' audio actually took — <c>LAN · P2P direct</c>,
+    /// <c>RelayControl signaling · P2P direct</c> or <c>RelayControl signaling · TURN relay</c> —
+    /// never claimed before ICE connects (issue #75).
+    /// </summary>
+    public string ConnectionPathText { get; private set; } = DashboardViewModel.Unknown;
+
     public void Update(PublisherSnapshot? snapshot, WebRtcPublisherDiagnostics? diagnostics, bool forceRelay)
     {
+        ConnectionPathText = ResolvePathText(diagnostics);
         var previous = uiState;
         model = DashboardViewModel.From(snapshot, diagnostics, forceRelay);
         UiState = PublisherUiStateResolver.Resolve(snapshot, diagnostics, forceRelay, previous);
@@ -145,7 +156,23 @@ public sealed class DashboardShellViewModel : ViewModelBase
         nameof(IsCapturing), nameof(AudioLevelFraction), nameof(AudioPeakDbText),
         nameof(LatencyText), nameof(JitterText), nameof(PacketLossText),
         nameof(BitrateText), nameof(CodecText), nameof(BandwidthProfileText),
+        nameof(ConnectionPathText),
     ];
+
+    private string ResolvePathText(WebRtcPublisherDiagnostics? diagnostics)
+    {
+        if (diagnostics is not { Viewers.Count: > 0 }) return DashboardViewModel.Unknown;
+        var labels = diagnostics.Viewers
+            .Select(viewer =>
+            {
+                var origin = OriginOf?.Invoke(viewer.ViewerId) ?? SignalingOrigin.Cloud;
+                var path = ConnectionPathResolver.Resolve(origin, viewer.State, viewer.SelectedCandidatePair);
+                var label = ConnectionPathResolver.Label(path);
+                return ConnectionPathResolver.DiagnosticCode(origin, path) is { } code ? $"{label} ({code})" : label;
+            })
+            .Distinct(StringComparer.Ordinal);
+        return string.Join(" / ", labels);
+    }
 
     private static (string Text, DashboardBadge Badge) GlobalStatus(PublisherUiState state) => state switch
     {

@@ -12,6 +12,10 @@ public static partial class DiagnosticRedactor
 
         var result = SensitiveAssignment().Replace(value, match => $"{match.Groups[1].Value}={Redacted}");
         result = BearerToken().Replace(result, $"Bearer {Redacted}");
+        // LAN pairing (issue #75): the device credential header, JSON secrets and typed codes.
+        result = LanAuthorization().Replace(result, $"SonicRelay-Lan {Redacted}");
+        result = JsonSecret().Replace(result, match => $"\"{match.Groups[1].Value}\":\"{Redacted}\"");
+        result = ManualPairingCode().Replace(result, Redacted);
         result = Jwt().Replace(result, Redacted);
         result = Email().Replace(result, Redacted);
         result = SdpPayload().Replace(result, match => $"{match.Groups[1].Value}={Redacted}");
@@ -34,11 +38,20 @@ public static partial class DiagnosticRedactor
 
     public static bool IsSensitiveKey(string key) => SensitiveKey().IsMatch(key);
 
-    [GeneratedRegex(@"(?i)(?<![a-z0-9_-])(password|access[_-]?token|refresh[_-]?token|token|credential[_-]?secret|qr[_-]?payload|pairing[_-]?code|session[_-]?code|code)\s*=\s*[^\s&]+")]
+    [GeneratedRegex(@"(?i)(?<![a-z0-9_-])(password|access[_-]?token|refresh[_-]?token|token|credential[_-]?secret|qr[_-]?payload|pairing[_-]?code|session[_-]?code|code|credential|sec)\s*=\s*[^\s&]+")]
     private static partial Regex SensitiveAssignment();
 
-    [GeneratedRegex(@"(?i)^(password|access[_-]?token|refresh[_-]?token|token|authorization|credential[_-]?secret|qr[_-]?payload|pairing[_-]?code|session[_-]?code|code|sdp|ice[_-]?candidate)$")]
+    [GeneratedRegex(@"(?i)^(password|access[_-]?token|refresh[_-]?token|token|authorization|credential[_-]?secret|qr[_-]?payload|pairing[_-]?code|session[_-]?code|code|credential|sec|sdp|ice[_-]?candidate)$")]
     private static partial Regex SensitiveKey();
+
+    [GeneratedRegex(@"(?i)\bSonicRelay-Lan\s+[^\s,;]+")]
+    private static partial Regex LanAuthorization();
+
+    [GeneratedRegex(@"(?i)""(credential|sec|code)""\s*:\s*""[^""]*""")]
+    private static partial Regex JsonSecret();
+
+    [GeneratedRegex(@"(?i)\b[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}\b")]
+    private static partial Regex ManualPairingCode();
 
     [GeneratedRegex(@"(?i)\bbearer\s+[^\s,;]+")]
     private static partial Regex BearerToken();

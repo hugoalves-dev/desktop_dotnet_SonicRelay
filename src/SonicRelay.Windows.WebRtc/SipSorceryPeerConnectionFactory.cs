@@ -14,7 +14,8 @@ public sealed class SipSorceryPeerConnectionFactory(
     IIceServersProvider iceServersProvider,
     Func<bool>? forceRelay = null,
     Func<AudioQualityProfile>? audioProfile = null,
-    Func<WebRtcAudioDirection>? audioDirection = null) : IWebRtcPeerConnectionFactory
+    Func<WebRtcAudioDirection>? audioDirection = null,
+    Func<string, PeerIcePolicy>? icePolicy = null) : IWebRtcPeerConnectionFactory
 {
     private readonly IIceServersProvider iceServersProvider =
         iceServersProvider ?? throw new ArgumentNullException(nameof(iceServersProvider));
@@ -32,6 +33,10 @@ public sealed class SipSorceryPeerConnectionFactory(
     private readonly Func<WebRtcAudioDirection> audioDirection =
         audioDirection ?? (() => WebRtcAudioDirection.SendOnly);
 
+    // Read at creation time per viewer: the policy depends on which transport carried that
+    // viewer's signaling (issue #75). Without one, every viewer is a cloud viewer as before.
+    private readonly Func<string, PeerIcePolicy>? icePolicy = icePolicy;
+
     public async Task<IWebRtcPeerConnection> CreateAsync(
         string viewerId,
         WebRtcPublisherOptions options,
@@ -40,13 +45,32 @@ public sealed class SipSorceryPeerConnectionFactory(
         ArgumentException.ThrowIfNullOrWhiteSpace(viewerId);
         ArgumentNullException.ThrowIfNull(options);
 
-        var servers = await ResolveIceServersAsync(options, cancellationToken).ConfigureAwait(false);
-        var configuration = BuildConfiguration(servers, forceRelay());
+        var configuration = await ResolveConfigurationAsync(viewerId, options, cancellationToken).ConfigureAwait(false);
         return new SipSorceryPeerConnection(
             viewerId,
             new RTCPeerConnection(configuration),
             audioProfile(),
             audioDirection());
+    }
+
+    /// <summary>
+    /// Resolves the ICE configuration for one viewer. A policy that excludes configured servers
+    /// (LAN-signaled viewers) never calls the ICE-server provider, so a LAN session makes no
+    /// request to RelayControl for STUN/TURN credentials.
+    /// </summary>
+    public async Task<RTCConfiguration> ResolveConfigurationAsync(
+        string viewerId,
+        WebRtcPublisherOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(viewerId);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var policy = icePolicy?.Invoke(viewerId) ?? PeerIcePolicy.For(SignalingOrigin.Cloud, forceRelay());
+        if (!policy.UseConfiguredServers) return BuildConfiguration([], forceRelay: false);
+
+        var servers = await ResolveIceServersAsync(options, cancellationToken).ConfigureAwait(false);
+        return BuildConfiguration(servers, policy.ForceRelay);
     }
 
     /// <summary>

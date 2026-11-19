@@ -86,6 +86,13 @@ The Connection page creates a short-lived pairing challenge and shows both its m
 
 The pairing code is not the session join code. After pairing, create a stream session and share the separately labeled session join code with the viewer. Neither QR payloads nor pairing/session codes are persisted.
 
+## Local network (offline) mode
+
+With **Settings → Connectivity** set to `auto` or `lanOnly`, the publisher also hosts an
+authenticated TLS signaling endpoint on the local network, so a paired phone can stream with no
+internet, RelayControl, STUN or TURN. Pairing works offline through a QR code or a typed code, and
+the dashboard shows the path the audio actually used. See [LAN mode](docs/lan-mode.md).
+
 ## WebSocket signaling client
 
 The configured `signalingBaseUrl` is converted to WS(S) when needed and receives only the escaped `sessionId` query parameter. Every outbound connection or reconnection resolves a current DeviceBearer token. On connection the client sends `publisher.ready`, validates and dispatches supported control envelopes, answers `ping` with `pong`, and exposes connection/reconnection state.

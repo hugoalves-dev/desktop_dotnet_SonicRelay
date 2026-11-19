@@ -79,6 +79,11 @@ public sealed class SettingsViewModel : ViewModelBase
 
     public bool IsConnected { get; }
 
+    /// <summary>The LAN/cloud connectivity card (issue #75); null without a runtime.</summary>
+    public ConnectivitySettingsViewModel? Connectivity { get; init; }
+
+    public bool HasConnectivity => Connectivity is not null;
+
     /// <summary>Startup options; independent of the backend, so set by the shell, not the runtime.</summary>
     public StartupSettingsViewModel? Startup
     {

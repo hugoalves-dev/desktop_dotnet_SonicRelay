@@ -7,8 +7,10 @@ using SonicRelay.Windows.Audio;
 using SonicRelay.Windows.Core.Audio;
 using SonicRelay.Windows.Core.Configuration;
 using SonicRelay.Windows.Core.Diagnostics;
+using SonicRelay.Windows.Core.Storage;
 using SonicRelay.Windows.Core.Storage.DeviceIdentity;
 using SonicRelay.Windows.Presentation.Pairing;
+using SonicRelay.Windows.Presentation.Sessions;
 using SonicRelay.Windows.Signaling;
 using SonicRelay.Windows.WebRtc;
 
@@ -51,8 +53,17 @@ public sealed class PublisherRuntime : IAsyncDisposable
         DeviceIdentitySession deviceIdentitySession,
         DiagnosticLog diagnosticLog,
         SystemNetworkAvailability networkAvailability,
-        ResourceUsageSampler resourceUsageSampler)
+        ResourceUsageSampler resourceUsageSampler,
+        LanServices lan,
+        SessionHostRouter sessions,
+        CloudAvailability cloud)
     {
+        Lan = lan;
+        Sessions = sessions;
+        this.cloud = cloud;
+        // One QR for both transports: the LAN block always, the cloud challenge when one is open.
+        LanPairing = new LanPairingViewModel(lan, new PairingQrCodeService(), () =>
+            Pairing?.Challenge is { } challenge ? new Lan.Pairing.CloudPairingBlock(challenge.ChallengeId, challenge.Code) : null);
         this.networkAvailability = networkAvailability;
         this.resourceUsageSampler = resourceUsageSampler;
         this.httpClient = httpClient;
@@ -87,6 +98,23 @@ public sealed class PublisherRuntime : IAsyncDisposable
     public DiagnosticReportExporter ReportExporter { get; }
     public IWebRtcPublisher WebRtcPublisher => webRtcPublisher;
     public PairingViewModel? Pairing { get; private set; }
+
+    /// <summary>LAN identity, trust, pairing windows, hub and host (issue #75).</summary>
+    public LanServices Lan { get; }
+
+    /// <summary>Chooses Cloud/LAN/Dual per session; also the source of each viewer's signaling origin.</summary>
+    public SessionHostRouter Sessions { get; }
+
+    public ConnectivityPreferenceStore Connectivity => Lan.Connectivity;
+
+    /// <summary>Offline pairing surface (QR v2, manual code, LAN-paired phones).</summary>
+    public LanPairingViewModel LanPairing { get; }
+
+    /// <summary>Whether this device holds a working cloud identity (false offline or in lanOnly).</summary>
+    public bool CloudAvailable => cloud.IdentityReady;
+
+    private readonly CloudAvailability cloud;
+    private bool lanStarted;
     public event Action? PairingChanged;
 
     /// <summary>Whether this platform composition can play back what other participants send.</summary>
@@ -118,7 +146,8 @@ public sealed class PublisherRuntime : IAsyncDisposable
         AudioOutputPreferenceStore? audioOutputPreferenceOverride = null,
         RelayPreferenceStore? relayPreferenceOverride = null,
         IDeviceIdentityApiClient? deviceIdentityApiClientOverride = null,
-        IAudioPlaybackBackend? playbackBackend = null)
+        IAudioPlaybackBackend? playbackBackend = null,
+        LanServices? lanOverride = null)
     {
         ArgumentNullException.ThrowIfNull(backendBaseUrl);
         ArgumentNullException.ThrowIfNull(audioCapture);
@@ -155,6 +184,26 @@ public sealed class PublisherRuntime : IAsyncDisposable
         var signaling = new SignalingClient(configuration, deviceIdentitySession, [signalingHandlers],
             networkAvailability, new DiagnosticRecoveryJournal(diagnosticLog));
         var relayPreference = relayPreferenceOverride ?? new RelayPreferenceStore();
+        // LAN sessions (issue #75): the identity is loaded here because the hub's participant id
+        // and the router must exist before the WebRTC publisher that sends through them. The
+        // host itself only starts from StartLanAsync, so composing a runtime opens no port.
+        var lan = lanOverride ?? LanServices.CreateAsync(
+                TokenProtectors.CreateDefault(),
+                new ConnectivityPreferenceStore(),
+                [signalingHandlers],
+                Environment.MachineName,
+                log: message => LogLan(diagnosticLog, message))
+            .GetAwaiter().GetResult();
+        var cloud = new CloudAvailability();
+        var sessions = new SessionHostRouter(
+            new SessionApiClient(http, deviceIdentitySession),
+            signaling,
+            lan.Sessions,
+            lan.Hub,
+            () => lan.Connectivity.Mode,
+            () => cloud.IdentityReady && networkAvailability.IsAvailable,
+            log: message => LogLan(diagnosticLog, message),
+            ensureCloud: token => cloud.Recover?.Invoke(token) ?? Task.FromResult(false));
         // ICE servers (including short-lived TURN credentials) come from the
         // backend, which serves the SonicRelay coturn deployment. The public
         // Google STUN fallback is a debug-build-only convenience for when the
@@ -176,9 +225,11 @@ public sealed class PublisherRuntime : IAsyncDisposable
                 iceServersProvider,
                 () => relayPreference.ForceRelay,
                 () => audioQuality.CurrentProfile,
-                () => sessionMode.IsDuplex ? WebRtcAudioDirection.SendRecv : WebRtcAudioDirection.SendOnly),
+                () => sessionMode.IsDuplex ? WebRtcAudioDirection.SendRecv : WebRtcAudioDirection.SendOnly,
+                // LAN-signaled viewers get host candidates only; cloud viewers keep STUN/TURN.
+                viewerId => PeerIcePolicy.For(sessions.OriginOf(viewerId), relayPreference.ForceRelay)),
             new WebRtcPublisherOptions());
-        var webRtcPublisher = new WebRtcPublisher(signaling, peers);
+        var webRtcPublisher = new WebRtcPublisher(sessions, peers);
         signalingHandlers.Register(webRtcPublisher);
 
         signaling.ReconnectAttempting += attempt => LogReconnectAttempt(diagnosticLog, attempt);
@@ -204,8 +255,8 @@ public sealed class PublisherRuntime : IAsyncDisposable
         var workflow = new PublisherWorkflow(
             deviceIdentitySession,
             credentialStore,
-            new SessionApiClient(http, deviceIdentitySession),
-            signaling,
+            sessions,
+            sessions,
             audio,
             new PairingApiClient(http, deviceIdentitySession),
             webRtcPublisher,
@@ -218,7 +269,7 @@ public sealed class PublisherRuntime : IAsyncDisposable
             workflow.LogActivity("WebRTC: ICE restart requested for a reconnected viewer.");
         webRtcPublisher.PeerRebuildRequested += _ =>
             workflow.LogActivity("WebRTC: rebuilding peer connection after repeated ICE restart failures.");
-        return new PublisherRuntime(
+        var runtime = new PublisherRuntime(
             http,
             workflow,
             normalized,
@@ -233,14 +284,58 @@ public sealed class PublisherRuntime : IAsyncDisposable
             deviceIdentitySession,
             diagnosticLog,
             networkAvailability,
-            resourceUsageSampler);
+            resourceUsageSampler,
+            lan,
+            sessions,
+            cloud);
+        // An `auto` start without RelayControl leaves the cloud unusable; this lets the next
+        // session bring it back once the API answers, without restarting the app.
+        cloud.Recover = async token =>
+        {
+            if (cloud.IdentityReady) return true;
+            if (!networkAvailability.IsAvailable) return false;
+            await deviceIdentitySession.GetAccessTokenAsync(cancellationToken: token).ConfigureAwait(false);
+            var stored = await credentialStore.LoadAsync(token).ConfigureAwait(false);
+            if (!stored.Succeeded || stored.Credential is null) return false;
+            runtime.OnCloudRecovered(stored.Credential.DeviceId);
+            return true;
+        };
+        return runtime;
     }
 
+    private void OnCloudRecovered(Guid cloudDeviceId)
+    {
+        cloud.IdentityReady = true;
+        LogLan(DiagnosticLog, "RelayControl is reachable again; new sessions include the cloud.");
+        SetPairing(new PairingViewModel(
+            new PairingApiClient(httpClient, deviceIdentitySession, () => deviceIdentitySession.CurrentDeviceId),
+            new PairingQrCodeService(),
+            cloudDeviceId));
+    }
+
+    /// <summary>
+    /// Bootstraps the cloud identity unless the mode is <c>lanOnly</c>; when the cloud is not
+    /// usable and the mode allows LAN, the publisher becomes ready with its LAN identity instead,
+    /// so an offline machine can still host LAN sessions (issue #75).
+    /// </summary>
     public async Task InitializeDeviceIdentityAsync(CancellationToken cancellationToken = default)
     {
         SetPairing(null);
-        await Workflow.InitializeDeviceIdentityAsync(cancellationToken);
-        if (Workflow.State.DeviceId is not { } deviceId)
+        cloud.IdentityReady = false;
+        var mode = Connectivity.Mode;
+        if (mode != ConnectivityModes.LanOnly)
+        {
+            await Workflow.InitializeDeviceIdentityAsync(cancellationToken);
+            cloud.IdentityReady = Workflow.State is { IsAuthenticated: true, ErrorMessage: null };
+        }
+
+        if (!cloud.IdentityReady && ConnectivityModes.AllowsLan(mode))
+        {
+            await Workflow.InitializeLocalIdentityAsync(Lan.Identity.PublisherDeviceId, cancellationToken);
+            return;
+        }
+
+        if (!cloud.IdentityReady || Workflow.State.DeviceId is not { } deviceId)
         {
             return;
         }
@@ -249,6 +344,21 @@ public sealed class PublisherRuntime : IAsyncDisposable
             new PairingApiClient(httpClient, deviceIdentitySession, () => deviceIdentitySession.CurrentDeviceId),
             new PairingQrCodeService(),
             deviceId));
+    }
+
+    /// <summary>
+    /// Starts (or stops) the LAN host for the current connectivity mode and keeps following mode
+    /// changes. Called by the app shell once; never by composition, so tests open no ports.
+    /// </summary>
+    public Task StartLanAsync(CancellationToken cancellationToken = default)
+    {
+        if (!lanStarted)
+        {
+            lanStarted = true;
+            Connectivity.Changed += () => _ = Lan.ApplyConnectivityAsync();
+        }
+
+        return Lan.ApplyConnectivityAsync(cancellationToken);
     }
 
     private void SetPairing(PairingViewModel? value)
@@ -308,6 +418,12 @@ public sealed class PublisherRuntime : IAsyncDisposable
 
     private static readonly IReadOnlyDictionary<string, string> NoProperties = new Dictionary<string, string>();
 
+    private static async void LogLan(DiagnosticLog log, string message)
+    {
+        try { await log.WriteAsync("lan", message, NoProperties); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ObjectDisposedException) { }
+    }
+
     private static async void LogReconnectAttempt(DiagnosticLog log, int attempt)
     {
         try { await log.WriteAsync("reconnect-attempt", $"Signaling reconnect attempt {attempt + 1}.", NoProperties); }
@@ -363,10 +479,21 @@ public sealed class PublisherRuntime : IAsyncDisposable
         // disposed device.
         if (playback is not null) await playback.DisposeAsync();
         await webRtcPublisher.DisposeAsync();
+        LanPairing.Dispose();
+        await Lan.DisposeAsync();
         await resourceUsageSampler.DisposeAsync();
         deviceIdentitySession.Dispose();
         networkAvailability.Dispose();
         httpClient.Dispose();
         DiagnosticLog.Dispose();
     }
+}
+
+/// <summary>Mutable flag shared by the runtime and the session router.</summary>
+public sealed class CloudAvailability
+{
+    public bool IdentityReady { get; set; }
+
+    /// <summary>Tries to restore a cloud identity that was unavailable; true when usable.</summary>
+    public Func<CancellationToken, Task<bool>>? Recover { get; set; }
 }

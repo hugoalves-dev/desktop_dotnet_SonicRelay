@@ -102,6 +102,9 @@ public partial class App : Application
             // short-lived access token so a returning device reconnects automatically instead
             // of re-pairing (issue #26). A missing/unreachable backend simply leaves the
             // sign-in surface showing.
+            // The LAN host follows the connectivity mode independently of the cloud: an
+            // offline machine still accepts paired phones (issue #75).
+            await runtime.StartLanAsync();
             await runtime.InitializeDeviceIdentityAsync();
             await viewModel.StartSessionIfConfiguredAsync();
         }

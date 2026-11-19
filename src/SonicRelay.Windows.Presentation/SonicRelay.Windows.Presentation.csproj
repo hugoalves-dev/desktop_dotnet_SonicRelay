@@ -8,6 +8,7 @@
     <ProjectReference Include="../SonicRelay.Windows.Audio/SonicRelay.Windows.Audio.csproj" />
     <ProjectReference Include="../SonicRelay.Windows.Core/SonicRelay.Windows.Core.csproj" />
     <ProjectReference Include="../SonicRelay.Windows.Signaling/SonicRelay.Windows.Signaling.csproj" />
+    <ProjectReference Include="../SonicRelay.Windows.Lan/SonicRelay.Windows.Lan.csproj" />
     <ProjectReference Include="../SonicRelay.Windows.WebRtc/SonicRelay.Windows.WebRtc.csproj" />
   </ItemGroup>
 </Project>

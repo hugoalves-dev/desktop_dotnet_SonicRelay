@@ -5,6 +5,7 @@
     <Project Path="src/SonicRelay.Windows.Core/SonicRelay.Windows.Core.csproj" />
     <Project Path="src/SonicRelay.Windows.Signaling/SonicRelay.Windows.Signaling.csproj" />
     <Project Path="src/SonicRelay.Windows.WebRtc/SonicRelay.Windows.WebRtc.csproj" />
+    <Project Path="src/SonicRelay.Windows.Lan/SonicRelay.Windows.Lan.csproj" />
     <Project Path="src/SonicRelay.Windows.Presentation/SonicRelay.Windows.Presentation.csproj" />
     <Project Path="src/SonicRelay.Platform.Linux/SonicRelay.Platform.Linux.csproj" />
     <Project Path="src/SonicRelay.Platform.MacOs/SonicRelay.Platform.MacOs.csproj" />
@@ -16,6 +17,7 @@
     <Project Path="tests/SonicRelay.Windows.Core.Tests/SonicRelay.Windows.Core.Tests.csproj" />
     <Project Path="tests/SonicRelay.Windows.Signaling.Tests/SonicRelay.Windows.Signaling.Tests.csproj" />
     <Project Path="tests/SonicRelay.Windows.WebRtc.Tests/SonicRelay.Windows.WebRtc.Tests.csproj" />
+    <Project Path="tests/SonicRelay.Windows.Lan.Tests/SonicRelay.Windows.Lan.Tests.csproj" />
     <Project Path="tests/SonicRelay.Windows.Presentation.Tests/SonicRelay.Windows.Presentation.Tests.csproj" />
     <Project Path="tests/SonicRelay.Windows.Desktop.Tests/SonicRelay.Windows.Desktop.Tests.csproj" />
     <Project Path="tests/SonicRelay.Platform.Linux.Tests/SonicRelay.Platform.Linux.Tests.csproj" />

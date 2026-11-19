@@ -29,6 +29,52 @@ public sealed class DashboardShellViewModelTests
         [new PeerConnectionDiagnostics("v1", PeerConnectionState.Connected, "host:host", TimeSpan.FromMilliseconds(42))]);
 
     [Fact]
+    public void PathLabel_IsLanDirect_ForAConnectedLanViewer()
+    {
+        var vm = new DashboardShellViewModel { OriginOf = _ => SignalingOrigin.Lan };
+
+        vm.Update(StreamingSnapshot(), new WebRtcPublisherDiagnostics(1,
+            [new PeerConnectionDiagnostics("v1", PeerConnectionState.Connected, "host->host")]), forceRelay: false);
+
+        Assert.Equal("LAN · P2P direct", vm.ConnectionPathText);
+    }
+
+    [Fact]
+    public void PathLabel_PendingUntilConnected()
+    {
+        var vm = new DashboardShellViewModel { OriginOf = _ => SignalingOrigin.Lan };
+
+        vm.Update(StreamingSnapshot(), new WebRtcPublisherDiagnostics(0,
+            [new PeerConnectionDiagnostics("v1", PeerConnectionState.Connecting)]), forceRelay: false);
+
+        Assert.Equal("Connecting…", vm.ConnectionPathText);
+    }
+
+    [Fact]
+    public void PathLabel_ShowsTurnForARelayedCloudViewer_AndDashWithoutViewers()
+    {
+        var vm = new DashboardShellViewModel();
+
+        vm.Update(StreamingSnapshot(), new WebRtcPublisherDiagnostics(1,
+            [new PeerConnectionDiagnostics("v1", PeerConnectionState.Connected, "relay->host")]), forceRelay: false);
+        Assert.Equal("RelayControl signaling · TURN relay", vm.ConnectionPathText);
+
+        vm.Update(StreamingSnapshot(), new WebRtcPublisherDiagnostics(0, []), forceRelay: false);
+        Assert.Equal("—", vm.ConnectionPathText);
+    }
+
+    [Fact]
+    public void PathLabel_ExplainsANoRouteLanFailure()
+    {
+        var vm = new DashboardShellViewModel { OriginOf = _ => SignalingOrigin.Lan };
+
+        vm.Update(StreamingSnapshot(), new WebRtcPublisherDiagnostics(0,
+            [new PeerConnectionDiagnostics("v1", PeerConnectionState.Failed)]), forceRelay: false);
+
+        Assert.Contains("ice.no_direct_route", vm.ConnectionPathText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Update_projects_streaming_state_from_snapshot()
     {
         var vm = new DashboardShellViewModel();

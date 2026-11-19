@@ -22,6 +22,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     private IWebRtcPublisher? webRtc;
     private PublisherSnapshot? snapshot;
     private PairingViewModel? pairing;
+    private LanPairingViewModel? lanPairing;
     private NavigationItem selectedNavigation;
     private bool clearLogsArmed;
     private bool unpairConfirmationArmed;
@@ -124,6 +125,13 @@ public sealed class MainWindowViewModel : ViewModelBase
     /// bootstraps (<see cref="PublisherRuntime.Pairing"/>), so the pairing view renders its
     /// disconnected placeholder state until then.
     /// </summary>
+    /// <summary>Offline LAN pairing surface (issue #75); null without a runtime.</summary>
+    public LanPairingViewModel? LanPairing
+    {
+        get => lanPairing;
+        private set => SetProperty(ref lanPairing, value);
+    }
+
     public PairingViewModel? Pairing
     {
         get => pairing;
@@ -274,7 +282,12 @@ public sealed class MainWindowViewModel : ViewModelBase
         Settings = next is null
             ? new SettingsViewModel()
             : new SettingsViewModel(next.BackendBaseUrl.ToString(), next.RelayPreference, next.AudioQuality,
-                ChangeBackendUrlAsync, next.RelaySettingsApi);
+                ChangeBackendUrlAsync, next.RelaySettingsApi)
+            {
+                Connectivity = new ConnectivitySettingsViewModel(next.Lan),
+            };
+        LanPairing = next?.LanPairing;
+        Shell.OriginOf = next is null ? null : next.Sessions.OriginOf;
         Audio = next is null
             ? new AudioPageViewModel()
             : new AudioPageViewModel(next.AudioCapture, next.AudioOutput, next.Workflow);

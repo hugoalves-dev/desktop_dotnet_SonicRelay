@@ -1,0 +1,40 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="SonicRelay.Windows.Desktop.Controls.LanPairingView">
+  <Border Classes="card" Width="560" MaxWidth="560" HorizontalAlignment="Center">
+    <StackPanel Spacing="16">
+      <StackPanel Spacing="4">
+        <TextBlock Classes="card-title" Text="Pair over the local network" />
+        <TextBlock Classes="metric-label" TextWrapping="Wrap"
+                   Text="Works without internet. Scan the QR, or on another subnet type an address and the code below in the SonicRelay app. The code is single-use and expires in 2 minutes." />
+      </StackPanel>
+
+      <TextBlock x:Name="HostStatusText" Classes="metric-label" TextWrapping="Wrap" Text="—" />
+
+      <Grid ColumnDefinitions="Auto,*" ColumnSpacing="20">
+        <Border Grid.Column="0" Width="184" Height="184" Background="White"
+                CornerRadius="{StaticResource Sonic.RadiusSm}" Padding="8">
+          <Image x:Name="QrImage" Stretch="Uniform" />
+        </Border>
+
+        <StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center">
+          <TextBlock Classes="metric-label" Text="Local pairing code" />
+          <TextBlock x:Name="ManualCodeText" Text="—" Classes="mono"
+                     FontSize="{StaticResource Sonic.FontSizeTitle}" FontWeight="Bold"
+                     Foreground="{DynamicResource Sonic.AccentTealBrush}" />
+          <TextBlock Classes="metric-label" Text="Addresses" Margin="0,8,0,0" />
+          <TextBlock x:Name="EndpointsText" Text="—" Classes="mono" TextWrapping="Wrap"
+                     FontSize="{StaticResource Sonic.FontSizeLabel}" />
+          <TextBlock x:Name="ExpiryText" Classes="metric-label" Text="Open a local pairing code to begin." />
+        </StackPanel>
+      </Grid>
+
+      <Button x:Name="OpenButton" Content="Create local pairing code" Click="Open_Click" HorizontalAlignment="Left" />
+
+      <TextBlock Classes="card-title" Text="Phones paired on this network" FontSize="{StaticResource Sonic.FontSizeBody}" />
+      <StackPanel x:Name="DevicesPanel" Spacing="8">
+        <TextBlock Classes="metric-label" Text="No phones paired over the local network." />
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</UserControl>

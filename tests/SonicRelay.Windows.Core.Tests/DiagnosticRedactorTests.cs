@@ -21,6 +21,27 @@ public sealed class DiagnosticRedactorTests
     }
 
     [Fact]
+    public void Redactor_RemovesLanSecrets()
+    {
+        const string input = "Authorization: SonicRelay-Lan Zm9vYmFyYmF6cXV4 credential=c2VjcmV0Y3JlZA sec=ECAwQFBgcICQoA \"sec\":\"ECAwQFBgcICQoA\" \"credential\":\"c2VjcmV0Y3JlZA\" manual 0E85-HHQJ-20G3-0G2G";
+
+        var result = DiagnosticRedactor.Redact(input);
+
+        Assert.DoesNotContain("Zm9vYmFyYmF6cXV4", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("c2VjcmV0Y3JlZA", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("ECAwQFBgcICQoA", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("0E85-HHQJ-20G3-0G2G", result, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("credential")]
+    [InlineData("sec")]
+    public void LanKeys_AreSensitive(string key)
+    {
+        Assert.True(DiagnosticRedactor.IsSensitiveKey(key));
+    }
+
+    [Fact]
     public void RedactRemovesSensitiveUriQueryValues()
     {
         var result = DiagnosticRedactor.Redact("https://relay.test/connect?token=secret&code=private&mode=listen");

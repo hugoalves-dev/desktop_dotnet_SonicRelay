@@ -43,6 +43,27 @@
         </StackPanel>
       </Border>
 
+      <Border Classes="card" IsVisible="{Binding HasConnectivity}">
+        <StackPanel Spacing="12" DataContext="{Binding Connectivity}" x:DataType="vm:ConnectivitySettingsViewModel">
+          <TextBlock Classes="card-title" Text="Connectivity" />
+          <TextBlock Classes="metric-label" TextWrapping="Wrap"
+                     Text="auto: local network first for paired phones, RelayControl when available. lanOnly: never contacts RelayControl, STUN or TURN. cloudOnly: RelayControl only. Applies to the next session." />
+          <ComboBox ItemsSource="{Binding ModeOptions}" SelectedItem="{Binding Mode}"
+                    AutomationProperties.Name="Connectivity mode" />
+          <TextBlock Text="Local network port" Foreground="{DynamicResource Sonic.TextPrimaryBrush}" />
+          <TextBlock Classes="metric-label" TextWrapping="Wrap"
+                     Text="Leave blank for an automatic port. Set a fixed port if your network administrator opens a single firewall rule for SonicRelay." />
+          <TextBox Text="{Binding FixedPortInput}" Watermark="automatic" AutomationProperties.Name="Local network port" />
+          <Button Content="Save connectivity" Command="{Binding SaveCommand}" />
+          <TextBlock Classes="metric-label" Foreground="{DynamicResource Sonic.DangerBrush}" TextWrapping="Wrap"
+                     IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" Text="{Binding Error}" />
+          <TextBlock Classes="metric-label" TextWrapping="Wrap" Text="{Binding Status}" />
+          <TextBlock Classes="metric-label" TextWrapping="Wrap" Text="{Binding HostStatus}" />
+          <Button Content="Reset LAN identity" Classes="ghost" Command="{Binding ResetIdentityCommand}"
+                  ToolTip.Tip="Creates a new certificate; every phone has to pair again." />
+        </StackPanel>
+      </Border>
+
       <Border Classes="card" IsVisible="{Binding Startup, Converter={x:Static ObjectConverters.IsNotNull}}">
         <StackPanel Spacing="12" DataContext="{Binding Startup}" x:DataType="vm:StartupSettingsViewModel">
           <TextBlock Classes="card-title" Text="Startup" />
