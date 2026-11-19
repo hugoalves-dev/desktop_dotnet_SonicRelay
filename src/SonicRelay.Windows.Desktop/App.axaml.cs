@@ -36,10 +36,6 @@ public partial class App : Application
             desktop.MainWindow = mainWindow;
 
             if (IsSupportedPlatform) ConfigureStartup(viewModel);
-            // Launched at sign-in: start minimized; with the tray available the window
-            // lifecycle then hides it there, exactly like a manual minimize.
-            if (StartupArguments.RequestsMinimized(desktop.Args ?? []))
-                mainWindow.WindowState = WindowState.Minimized;
 
             // Tray + minimize/close-to-tray + reconnect (issue #32). Never let a missing tray
             // backend stop the app from launching.
@@ -53,6 +49,11 @@ public partial class App : Application
                 viewModel.LogDiagnostic("tray", "Tray integration unavailable; closing the window will exit normally instead of minimizing to tray.");
             }
 
+            // Launched at sign-in: start minimized. Set after the tray controller subscribes,
+            // so with a tray the window is hidden there exactly like a manual minimize.
+            if (StartupArguments.RequestsMinimized(desktop.Args ?? []))
+                mainWindow.WindowState = WindowState.Minimized;
+
             if (IsSupportedPlatform)
                 _ = AttachConfiguredRuntimeAsync(viewModel);
         }
@@ -63,7 +64,9 @@ public partial class App : Application
     private static void ConfigureStartup(MainWindowViewModel viewModel)
     {
         var platform = AutoStartServiceFactory.DetectPlatform();
-        var autoStart = Environment.ProcessPath is { } exe ? AutoStartServiceFactory.Create(exe, platform) : null;
+        var exe = AutoStartServiceFactory.ResolveExecutablePath(
+            Environment.GetEnvironmentVariable("APPIMAGE"), Environment.ProcessPath);
+        var autoStart = exe is null ? null : AutoStartServiceFactory.Create(exe, platform);
         var preferences = new PublisherStartupPreferenceStore();
         var startup = new StartupSettingsViewModel(autoStart, platform, preferences);
         viewModel.ConfigureStartup(preferences, startup);

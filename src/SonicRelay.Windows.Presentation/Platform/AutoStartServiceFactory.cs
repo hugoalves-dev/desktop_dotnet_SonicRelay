@@ -38,6 +38,14 @@ public static class AutoStartServiceFactory
         _ => null,
     };
 
+    /// <summary>
+    /// The path launch-at-login should start. Inside an AppImage the process runs from a
+    /// temporary mount that vanishes on exit, so the AppImage file itself (the
+    /// <c>APPIMAGE</c> variable its runtime sets) is what must be registered.
+    /// </summary>
+    public static string? ResolveExecutablePath(string? appImage, string? processPath) =>
+        string.IsNullOrWhiteSpace(appImage) ? processPath : appImage;
+
     public static AutoStartPlatform DetectPlatform()
     {
         if (OperatingSystem.IsWindows())

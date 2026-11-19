@@ -132,6 +132,13 @@ public sealed class SessionAutoStarter : IDisposable
 
     private void OnStateChanged(PublisherSnapshot state)
     {
+        // Losing the identity (unpair, a rejected credential) is a reset, not a dropped
+        // session: never stream on a freshly bootstrapped device until the next launch.
+        if (started && !state.IsAuthenticated)
+        {
+            NotifyUserEndedSession();
+            return;
+        }
         if (releasing || managedSessionId is null || state.SessionId == managedSessionId) return;
         HandleDrop();
     }

@@ -64,6 +64,18 @@ public sealed class AutoStartServiceTests
     }
 
     [Fact]
+    public void AppImageLaunchesRegisterTheAppImageNotItsTemporaryMount()
+    {
+        Assert.Equal(
+            "/home/me/Apps/SonicRelay.AppImage",
+            AutoStartServiceFactory.ResolveExecutablePath(
+                appImage: "/home/me/Apps/SonicRelay.AppImage",
+                processPath: "/tmp/.mount_abc/usr/lib/sonicrelay/SonicRelay.Windows.Desktop"));
+        Assert.Equal(Exe, AutoStartServiceFactory.ResolveExecutablePath(appImage: null, processPath: Exe));
+        Assert.Null(AutoStartServiceFactory.ResolveExecutablePath(appImage: "", processPath: null));
+    }
+
+    [Fact]
     public void FactoryReturnsNullWhereLaunchAtLoginIsNotManagedInApp()
     {
         Assert.Null(AutoStartServiceFactory.Create(Exe, AutoStartPlatform.MacOs));

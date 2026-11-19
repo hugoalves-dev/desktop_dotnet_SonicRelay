@@ -139,6 +139,22 @@ public sealed class SessionAutoStarterTests
     }
 
     [Fact]
+    public async Task Losing_the_device_identity_stops_everything_until_the_next_launch()
+    {
+        // Unpair clears the session and the identity, then re-bootstraps a fresh one: that
+        // must not be read as a dropped session and start capturing audio again.
+        var (control, time, starter) = Create();
+        await starter.OnIdentityReadyAsync();
+
+        control.Set(control.State with { SessionId = null, IsAuthenticated = false, DeviceId = null });
+        control.Set(control.State with { IsAuthenticated = true, DeviceId = Guid.NewGuid() });
+        time.Advance(TimeSpan.FromHours(1));
+        await starter.OnIdentityReadyAsync();
+
+        Assert.Equal(1, control.Creates);
+    }
+
+    [Fact]
     public async Task A_failed_audio_start_keeps_the_session_and_does_not_retry()
     {
         var (control, time, starter) = Create();

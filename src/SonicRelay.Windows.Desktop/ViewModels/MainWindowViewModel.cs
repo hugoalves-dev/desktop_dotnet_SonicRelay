@@ -381,6 +381,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         }
 
         DisarmUnpair();
+        autoStarter?.NotifyUserEndedSession();
         await workflow.UnpairAsync();
         SelectedNavigation = Navigation.Single(item => item.Key == PageKey.Pairing);
         pairingHeldByUnpair = true;
