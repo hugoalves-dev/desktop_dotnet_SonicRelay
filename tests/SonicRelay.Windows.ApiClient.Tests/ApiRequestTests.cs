@@ -39,6 +39,29 @@ public sealed class ApiRequestTests
     }
 
     [Fact]
+    public async Task RotateCodeUsesDocumentedRoute()
+    {
+        var requests = new List<(HttpMethod Method, string Path, string? Body)>();
+        var sessionId = Guid.Parse("00000000-0000-0000-0000-000000000003");
+        var response = """{"id":"00000000-0000-0000-0000-000000000003","sourceDeviceId":"00000000-0000-0000-0000-000000000002","status":"waiting","maxViewers":3,"codeExpiresAt":"2026-01-01T00:20:00Z","startedAt":null,"endedAt":null,"createdAt":"2026-01-01T00:00:00Z","code":"NEW456"}""";
+        var handler = new FakeHttpMessageHandler(async (request, cancellationToken) =>
+        {
+            requests.Add((request.Method, request.RequestUri!.AbsolutePath,
+                request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken)));
+            return FakeHttpMessageHandler.Json(HttpStatusCode.OK, response);
+        });
+        var client = new SessionApiClient(
+            TestClient.Create(handler),
+            new SequenceAccessTokenProvider("device-access"));
+
+        var rotated = await client.RotateCodeAsync(sessionId);
+
+        Assert.Equal("NEW456", rotated.Code);
+        Assert.Equal(DateTimeOffset.Parse("2026-01-01T00:20:00Z"), rotated.CodeExpiresAt);
+        Assert.Equal((HttpMethod.Post, $"/api/sessions/{sessionId}/rotate-code", (string?)null), Assert.Single(requests));
+    }
+
+    [Fact]
     public async Task DuplexSessionOperationsUseDocumentedRoutesAndBodies()
     {
         var requests = new List<(HttpMethod Method, string Path, string? Body)>();

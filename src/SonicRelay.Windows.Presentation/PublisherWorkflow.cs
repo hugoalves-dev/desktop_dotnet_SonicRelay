@@ -133,6 +133,7 @@ public sealed class PublisherWorkflow : IAsyncDisposable
                 {
                     SessionId = session.Id,
                     SessionCode = session.Code,
+                    CodeExpiresAt = session.CodeExpiresAt,
                     ViewerCount = 0,
                     SessionMode = mode,
                     OutgoingAudioMuted = false,
@@ -157,6 +158,22 @@ public sealed class PublisherWorkflow : IAsyncDisposable
                 });
                 throw;
             }
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Replaces the join code and extends its expiry, keeping a session that is still waiting
+    /// for its first viewer from expiring.
+    /// </summary>
+    public Task RotateCodeAsync(CancellationToken cancellationToken = default)
+    {
+        if (State.SessionId is null) return SetValidationErrorAsync("There is no active session to rotate.");
+        return ExecuteAsync(async token =>
+        {
+            var rotated = await sessions.RotateCodeAsync(State.SessionId.Value, token);
+            SetState(
+                state => state with { SessionCode = rotated.Code, CodeExpiresAt = rotated.CodeExpiresAt },
+                "Session code renewed.");
         }, cancellationToken);
     }
 
