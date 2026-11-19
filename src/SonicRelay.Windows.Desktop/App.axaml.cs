@@ -3,7 +3,9 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using SonicRelay.Windows.Core.Configuration;
+using Avalonia.Controls;
 using SonicRelay.Windows.Presentation;
+using SonicRelay.Windows.Presentation.Platform;
 using SonicRelay.Windows.Desktop.ViewModels;
 using SonicRelay.Windows.Desktop.Views;
 
@@ -33,6 +35,12 @@ public partial class App : Application
             var mainWindow = new MainWindow { DataContext = viewModel };
             desktop.MainWindow = mainWindow;
 
+            if (IsSupportedPlatform) ConfigureStartup(viewModel);
+            // Launched at sign-in: start minimized; with the tray available the window
+            // lifecycle then hides it there, exactly like a manual minimize.
+            if (StartupArguments.RequestsMinimized(desktop.Args ?? []))
+                mainWindow.WindowState = WindowState.Minimized;
+
             // Tray + minimize/close-to-tray + reconnect (issue #32). Never let a missing tray
             // backend stop the app from launching.
             try
@@ -52,6 +60,24 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
+    private static void ConfigureStartup(MainWindowViewModel viewModel)
+    {
+        var platform = AutoStartServiceFactory.DetectPlatform();
+        var autoStart = Environment.ProcessPath is { } exe ? AutoStartServiceFactory.Create(exe, platform) : null;
+        var preferences = new PublisherStartupPreferenceStore();
+        var startup = new StartupSettingsViewModel(autoStart, platform, preferences);
+        viewModel.ConfigureStartup(preferences, startup);
+        _ = LoadStartupAsync(startup);
+    }
+
+    private static async Task LoadStartupAsync(StartupSettingsViewModel startup)
+    {
+        // The registered state only drives the switch; failing to read it must not stop launch.
+        try { await startup.LoadAsync(); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+            or System.Security.SecurityException) { }
+    }
+
     private static async Task AttachConfiguredRuntimeAsync(MainWindowViewModel viewModel)
     {
         try
@@ -65,6 +91,7 @@ public partial class App : Application
             // of re-pairing (issue #26). A missing/unreachable backend simply leaves the
             // sign-in surface showing.
             await runtime.InitializeDeviceIdentityAsync();
+            await viewModel.StartSessionIfConfiguredAsync();
         }
         catch
         {

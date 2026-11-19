@@ -43,6 +43,24 @@
         </StackPanel>
       </Border>
 
+      <Border Classes="card" IsVisible="{Binding Startup, Converter={x:Static ObjectConverters.IsNotNull}}">
+        <StackPanel Spacing="12" DataContext="{Binding Startup}" x:DataType="vm:StartupSettingsViewModel">
+          <TextBlock Classes="card-title" Text="Startup" />
+          <CheckBox Content="Start with the system (minimized to the tray)"
+                    IsChecked="{Binding LaunchAtLogin}"
+                    IsVisible="{Binding CanToggleLaunchAtLogin}"
+                    AutomationProperties.Name="Start with the system" />
+          <TextBlock Classes="metric-label" TextWrapping="Wrap"
+                     IsVisible="{Binding ShowStoreStartupHint}"
+                     Text="{x:Static vm:StartupSettingsViewModel.StoreStartupHint}" />
+          <CheckBox Content="Start streaming when the app opens"
+                    IsChecked="{Binding StartSessionOnLaunch}"
+                    AutomationProperties.Name="Start streaming when the app opens" />
+          <TextBlock Classes="metric-label" TextWrapping="Wrap"
+                     Text="Creates a session and starts audio once this device is signed in, so a paired phone with auto-connect can join without anyone at the PC." />
+        </StackPanel>
+      </Border>
+
       <Border Classes="card" IsVisible="{Binding IsConnected}">
         <StackPanel Spacing="12">
           <TextBlock Classes="card-title" Text="Audio quality" />

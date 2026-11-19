@@ -78,6 +78,15 @@ public sealed class SettingsViewModel : ViewModelBase
     }
 
     public bool IsConnected { get; }
+
+    /// <summary>Startup options; independent of the backend, so set by the shell, not the runtime.</summary>
+    public StartupSettingsViewModel? Startup
+    {
+        get => startup;
+        set => SetProperty(ref startup, value);
+    }
+
+    private StartupSettingsViewModel? startup;
     public string BackendUrl { get; } = "—";
     public IReadOnlyList<AudioQualityProfile> Profiles { get; } = AudioQualityProfile.Presets;
 

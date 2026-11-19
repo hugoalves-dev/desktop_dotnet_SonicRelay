@@ -7,6 +7,9 @@ public static class StartupArguments
 {
     /// <summary>Start hidden in the tray (or minimized when there is no tray).</summary>
     public const string Minimized = "--minimized";
+
+    public static bool RequestsMinimized(IEnumerable<string> args) =>
+        args.Any(arg => string.Equals(arg, Minimized, StringComparison.OrdinalIgnoreCase));
 }
 
 public enum AutoStartPlatform
