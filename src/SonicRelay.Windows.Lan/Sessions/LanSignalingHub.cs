@@ -70,6 +70,15 @@ public sealed class LanSignalingHub : ISignalingClient, ILanConnectionSink
     /// <summary>Raised when the set of connected viewers changes (viewer count, origin routing).</summary>
     public event Action? ViewersChanged;
 
+    /// <summary>
+    /// Whether the publisher's own join and state broadcasts are echoed to the local handlers.
+    /// True for a LAN-only session, where the hub is the only backend. False in a dual-homed
+    /// session: RelayControl already describes the publisher to itself under its cloud
+    /// participant id, and a second description under the LAN id would appear as a phantom
+    /// participant. Viewers on the LAN still receive the publisher's state either way.
+    /// </summary>
+    public bool EchoPublisherToHandlers { get; set; } = true;
+
     /// <summary>The session mode the next/current session runs in; set before <see cref="ConnectAsync"/>.</summary>
     public string SessionMode { get; set; } = ParticipantAudioState.BroadcastMode;
 
@@ -122,7 +131,8 @@ public sealed class LanSignalingHub : ISignalingClient, ILanConnectionSink
         }
 
         SetState(SignalingConnectionState.Connected);
-        await DispatchAsync(new SignalingMessageEnvelope(SignalingMessageTypes.SessionJoined, sessionId, Payload: ToJson(self)), cancellationToken).ConfigureAwait(false);
+        if (EchoPublisherToHandlers)
+            await DispatchAsync(new SignalingMessageEnvelope(SignalingMessageTypes.SessionJoined, sessionId, Payload: ToJson(self)), cancellationToken).ConfigureAwait(false);
     }
 
     public async Task SendAsync(SignalingMessageEnvelope message, CancellationToken cancellationToken = default)
@@ -465,7 +475,8 @@ public sealed class LanSignalingHub : ISignalingClient, ILanConnectionSink
         if (session is null || state is null) return;
         var envelope = new SignalingMessageEnvelope(type, session, From: participantId, Payload: ToJson(state));
         foreach (var slot in LiveSlots()) await SendToAsync(slot, envelope, cancellationToken).ConfigureAwait(false);
-        await DispatchAsync(envelope, cancellationToken).ConfigureAwait(false);
+        if (participantId != publisherId || EchoPublisherToHandlers)
+            await DispatchAsync(envelope, cancellationToken).ConfigureAwait(false);
     }
 
     private ViewerSlot[] LiveSlots()

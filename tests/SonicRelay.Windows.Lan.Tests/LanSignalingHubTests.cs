@@ -271,6 +271,23 @@ public sealed class LanSignalingHubTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task DualMode_DoesNotEchoPublisherStateToHandlers_ButStillTellsViewers()
+    {
+        hub.EchoPublisherToHandlers = false;
+        await StartSessionAsync("duplex");
+        var viewer = await ConnectAsync(ViewerA);
+        handler.Next(SignalingMessageTypes.SessionJoined, ViewerA);
+
+        await hub.SendAsync(new SignalingMessageEnvelope(SignalingMessageTypes.ParticipantAudioStateChanged, SessionId,
+            Payload: Json.Of(new { muted = true })));
+
+        Assert.True(ParticipantAudioState.TryParse(viewer.Next(SignalingMessageTypes.ParticipantAudioStateChanged).Payload)!.AudioMuted);
+        Assert.False(handler.Received(SignalingMessageTypes.ParticipantAudioStateChanged, PublisherId, TimeSpan.FromMilliseconds(300)));
+        lock (handler.All)
+            Assert.DoesNotContain(handler.All, m => m.Type == SignalingMessageTypes.SessionJoined && m.From is null);
+    }
+
+    [Fact]
     public async Task OversizedMessage_ClosesWith1009()
     {
         await StartSessionAsync();

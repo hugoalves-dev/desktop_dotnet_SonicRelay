@@ -106,6 +106,18 @@ public sealed class SessionHostRouterTests : IAsyncLifetime
         Assert.Equal(SessionModes.Duplex, hub.SessionMode);
         Assert.Equal(1, cloudSignaling.Connects);
         Assert.Equal(SignalingConnectionState.Connected, router.State);
+        Assert.False(hub.EchoPublisherToHandlers);
+    }
+
+    [Fact]
+    public async Task LanSession_EchoesPublisherStateFromTheHub()
+    {
+        mode = ConnectivityModes.LanOnly;
+        var session = await router.CreateSessionAsync(new CreateSessionRequest());
+
+        await router.ConnectAsync(session.Id.ToString("D"));
+
+        Assert.True(hub.EchoPublisherToHandlers);
     }
 
     [Fact]

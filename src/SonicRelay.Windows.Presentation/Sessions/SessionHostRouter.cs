@@ -147,6 +147,8 @@ public sealed class SessionHostRouter : ISessionApiClient, ISignalingClient
 
     public async Task ConnectAsync(string sessionId, CancellationToken cancellationToken = default)
     {
+        // In a dual session RelayControl is the one describing the publisher to itself.
+        hub.EchoPublisherToHandlers = CurrentKind != SessionHostKind.Dual;
         switch (CurrentKind)
         {
             case SessionHostKind.Lan:
