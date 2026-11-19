@@ -260,6 +260,9 @@ public sealed class PublisherWorkflowDuplexTests
         public Task<StreamSessionResponse> EndSessionAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             Task.FromResult(Created with { Id = sessionId, Status = "ended" });
 
+        public Task<StreamSessionResponse> RotateCodeAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Created with { Id = sessionId });
+
         public Task<SessionParticipantsResponse> GetParticipantsAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
             Task.FromResult(Participants);
 

@@ -159,6 +159,28 @@ public sealed class SessionHostRouterTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RotateCode_Dual_RotatesTheCloudCode()
+    {
+        var session = await router.CreateSessionAsync(new CreateSessionRequest());
+
+        await router.RotateCodeAsync(session.Id);
+
+        Assert.Equal(1, cloud.Rotations);
+    }
+
+    [Fact]
+    public async Task RotateCode_LanOnly_NeverCallsCloud()
+    {
+        mode = ConnectivityModes.LanOnly;
+        cloud.Strict = true;
+        var session = await router.CreateSessionAsync(new CreateSessionRequest());
+
+        var rotated = await router.RotateCodeAsync(session.Id);
+
+        Assert.Equal("LAN", rotated.Code);
+    }
+
+    [Fact]
     public async Task LanSession_OriginOfKnownViewerIsLan()
     {
         mode = ConnectivityModes.LanOnly;
@@ -180,6 +202,14 @@ public sealed class SessionHostRouterTests : IAsyncLifetime
         public Exception? Failure { get; set; }
         public int Calls { get; private set; }
         public StreamSessionResponse? Created { get; private set; }
+        public int Rotations { get; private set; }
+
+        public Task<StreamSessionResponse> RotateCodeAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        {
+            Touch();
+            Rotations++;
+            return Task.FromResult(Created!);
+        }
 
         private void Touch()
         {

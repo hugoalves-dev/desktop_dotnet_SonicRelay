@@ -53,6 +53,71 @@ public sealed class PublisherWorkflowTests
     }
 
     [Fact]
+    public async Task CreateSessionExposesCodeExpiry()
+    {
+        await using var fixture = new DeviceIdentityFixture();
+        await fixture.Workflow.InitializeDeviceIdentityAsync();
+
+        await fixture.Workflow.CreateSessionAsync();
+
+        Assert.Equal(fixture.Sessions.Created.CodeExpiresAt, fixture.Workflow.State.CodeExpiresAt);
+    }
+
+    [Fact]
+    public async Task RotateCodeReplacesCodeAndExpiry()
+    {
+        await using var fixture = new DeviceIdentityFixture();
+        await fixture.Workflow.InitializeDeviceIdentityAsync();
+        await fixture.Workflow.CreateSessionAsync();
+
+        await fixture.Workflow.RotateCodeAsync();
+
+        Assert.Equal(fixture.Sessions.Created.Id, fixture.Sessions.RotatedId);
+        Assert.Equal("NEW456", fixture.Workflow.State.SessionCode);
+        Assert.Equal(fixture.Sessions.RotatedExpiry, fixture.Workflow.State.CodeExpiresAt);
+    }
+
+    [Fact]
+    public async Task RotateCodeReleasesASessionTheBackendReportsEnded()
+    {
+        await using var fixture = new DeviceIdentityFixture();
+        await fixture.Workflow.InitializeDeviceIdentityAsync();
+        await fixture.Workflow.CreateSessionAsync();
+        fixture.Sessions.RotateException = new ApiClientException(ApiErrorKind.Conflict, "ended", HttpStatusCode.Conflict);
+
+        await fixture.Workflow.RotateCodeAsync();
+
+        Assert.Null(fixture.Workflow.State.SessionId);
+    }
+
+    [Fact]
+    public async Task RotateCodeKeepsTheSessionOnATransientFailure()
+    {
+        await using var fixture = new DeviceIdentityFixture();
+        await fixture.Workflow.InitializeDeviceIdentityAsync();
+        await fixture.Workflow.CreateSessionAsync();
+        var sessionId = fixture.Workflow.State.SessionId;
+        fixture.Sessions.RotateException = new ApiClientException(ApiErrorKind.BackendUnavailable, "503", HttpStatusCode.ServiceUnavailable);
+
+        await fixture.Workflow.RotateCodeAsync();
+
+        Assert.Equal(sessionId, fixture.Workflow.State.SessionId);
+        Assert.NotNull(fixture.Workflow.State.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task RotateCodeWithoutSessionIsRejected()
+    {
+        await using var fixture = new DeviceIdentityFixture();
+        await fixture.Workflow.InitializeDeviceIdentityAsync();
+
+        await fixture.Workflow.RotateCodeAsync();
+
+        Assert.Null(fixture.Sessions.RotatedId);
+        Assert.NotNull(fixture.Workflow.State.ErrorMessage);
+    }
+
+    [Fact]
     public async Task CommandsAreGatedByPrerequisites()
     {
         await using var fixture = new DeviceIdentityFixture();
@@ -447,6 +512,18 @@ public sealed class PublisherWorkflowTests
             if (EndException is not null) return Task.FromException<StreamSessionResponse>(EndException);
             EndedId = sessionId;
             return Task.FromResult(Created with { Id = sessionId, Status = "ended", EndedAt = DateTimeOffset.UtcNow });
+        }
+
+        public Guid? RotatedId { get; private set; }
+        public DateTimeOffset RotatedExpiry { get; } = DateTimeOffset.UtcNow.AddMinutes(10);
+
+        public Exception? RotateException { get; set; }
+
+        public Task<StreamSessionResponse> RotateCodeAsync(Guid sessionId, CancellationToken cancellationToken = default)
+        {
+            RotatedId = sessionId;
+            if (RotateException is not null) return Task.FromException<StreamSessionResponse>(RotateException);
+            return Task.FromResult(Created with { Id = sessionId, Code = "NEW456", CodeExpiresAt = RotatedExpiry });
         }
     }
 

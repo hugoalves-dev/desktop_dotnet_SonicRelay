@@ -117,6 +117,12 @@ public sealed class SessionHostRouter : ISessionApiClient, ISignalingClient
         }
     }
 
+    /// <summary>Only the cloud has an expiring join code; a dual session rotates it there.</summary>
+    public Task<StreamSessionResponse> RotateCodeAsync(Guid sessionId, CancellationToken cancellationToken = default) =>
+        CurrentKind == SessionHostKind.Lan
+            ? lanSessions.RotateCodeAsync(sessionId, cancellationToken)
+            : cloudSessions.RotateCodeAsync(sessionId, cancellationToken);
+
     public async Task<SessionParticipantsResponse> GetParticipantsAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         switch (CurrentKind)

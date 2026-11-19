@@ -95,6 +95,23 @@ public sealed class LanSessionApiClientTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RotateCode_KeepsTheLanSession()
+    {
+        var session = await api.CreateSessionAsync(new CreateSessionRequest());
+
+        var rotated = await api.RotateCodeAsync(session.Id);
+
+        Assert.Equal(session.Id, rotated.Id);
+        Assert.Equal("LAN", rotated.Code);
+    }
+
+    [Fact]
+    public async Task RotateCode_WithoutThatSession_Throws()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() => api.RotateCodeAsync(Guid.NewGuid()));
+    }
+
+    [Fact]
     public async Task EndSession_ClosesHub_AndForgetsSession()
     {
         var session = await api.CreateSessionAsync(new CreateSessionRequest());

@@ -64,6 +64,16 @@ public sealed class LanSessionApiClient(LanSignalingHub hub, Guid publisherDevic
             with { Status = "ended", EndedAt = ended };
     }
 
+    /// <summary>A LAN session's code never expires, so rotating keeps the session as it is.</summary>
+    public Task<StreamSessionResponse> RotateCodeAsync(Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        lock (gate)
+        {
+            if (current?.Id != sessionId) throw new InvalidOperationException("The LAN session has ended.");
+            return Task.FromResult(current);
+        }
+    }
+
     public Task<SessionParticipantsResponse> GetParticipantsAsync(Guid sessionId, CancellationToken cancellationToken = default)
     {
         var now = time.GetUtcNow();

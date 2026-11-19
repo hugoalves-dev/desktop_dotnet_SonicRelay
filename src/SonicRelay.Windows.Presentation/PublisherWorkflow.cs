@@ -1,3 +1,4 @@
+using System.Net;
 using SonicRelay.Windows.ApiClient.Errors;
 using SonicRelay.Windows.ApiClient.Pairing;
 using SonicRelay.Windows.ApiClient.Sessions;
@@ -9,7 +10,7 @@ using SonicRelay.Windows.WebRtc;
 
 namespace SonicRelay.Windows.Presentation;
 
-public sealed class PublisherWorkflow : IAsyncDisposable
+public sealed class PublisherWorkflow : IAsyncDisposable, IPublisherSessionControl
 {
     private readonly ISessionApiClient sessions;
     private readonly ISignalingClient signaling;
@@ -150,6 +151,7 @@ public sealed class PublisherWorkflow : IAsyncDisposable
                 {
                     SessionId = session.Id,
                     SessionCode = session.Code,
+                    CodeExpiresAt = session.CodeExpiresAt,
                     ViewerCount = 0,
                     SessionMode = mode,
                     OutgoingAudioMuted = false,
@@ -174,6 +176,37 @@ public sealed class PublisherWorkflow : IAsyncDisposable
                 });
                 throw;
             }
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Replaces the join code and extends its expiry, keeping a session that is still waiting
+    /// for its first viewer from expiring.
+    /// </summary>
+    public Task RotateCodeAsync(CancellationToken cancellationToken = default)
+    {
+        if (State.SessionId is null) return SetValidationErrorAsync("There is no active session to rotate.");
+        return ExecuteAsync(async token =>
+        {
+            StreamSessionResponse rotated;
+            try
+            {
+                rotated = await sessions.RotateCodeAsync(State.SessionId.Value, token);
+            }
+            catch (ApiClientException exception) when (
+                exception.Kind == ApiErrorKind.Conflict || exception.StatusCode == HttpStatusCode.NotFound)
+            {
+                // 409/404: the backend has definitively ended or forgotten this session.
+                // Release it locally, exactly like signaling reporting it gone; any other
+                // failure is transient and leaves the (possibly still listened-to) session alone.
+                await signaling.CloseAsync(token);
+                SetState(state => state with { SessionId = null, SessionCode = null, CodeExpiresAt = null, ViewerCount = 0 },
+                    "The session no longer exists on the backend.");
+                return;
+            }
+            SetState(
+                state => state with { SessionCode = rotated.Code, CodeExpiresAt = rotated.CodeExpiresAt },
+                "Session code renewed.");
         }, cancellationToken);
     }
 
