@@ -62,8 +62,15 @@
              binding: with compiled bindings, an implicit `{Binding IsPairing}` on this same
              element resolves against this element's own (just-overridden) DataContext type,
              PairingViewModel, which has no IsPairing member, and fails to build (AVLN2000). -->
-        <controls:PairingView DataContext="{Binding Pairing}"
-                              IsVisible="{Binding ((vm:MainWindowViewModel)DataContext).IsPairing, ElementName=RootWindow}" />
+        <ScrollViewer IsVisible="{Binding IsPairing}"
+                      HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+          <StackPanel Spacing="16" Margin="0,0,0,24">
+            <controls:PairingView DataContext="{Binding Pairing}" />
+            <!-- Offline pairing (issue #75): works with no RelayControl; its QR also carries the
+                 cloud challenge above when one is open. -->
+            <controls:LanPairingView DataContext="{Binding LanPairing}" />
+          </StackPanel>
+        </ScrollViewer>
 
         <!-- Dashboard. The technical console scrolls with the cards (it used to be docked to
              the bottom of the page, where it painted over the card grid at narrow sizes). -->

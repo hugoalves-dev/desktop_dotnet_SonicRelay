@@ -29,6 +29,12 @@ flowchart TD
 - **Signaling** manages authenticated outbound WebSocket signaling messages, validated envelopes, connection state, and conservative reconnect behavior. It does not transport audio.
 - **Audio** owns default-render-device WASAPI loopback capture, validated audio-frame delivery, activity metering, lifecycle state, and capture diagnostics, all behind `IAudioCaptureService`/`IAudioDeviceEnumerator`.
 - **WebRtc** will own peer connections, negotiation, and Opus publication.
+- **Lan** (issue #75) owns everything for local-network sessions without RelayControl: the pinned
+  TLS identity, offline pairing windows, the revocable trust store, the Kestrel host
+  (`/lan/v1/pair`, `/lan/v1/signaling`), the signaling hub that plays the backend's session roles
+  for LAN viewers, and mDNS/DNS-SD. Presentation's `SessionHostRouter` picks Cloud, LAN or Dual
+  per session and feeds the unchanged `PublisherWorkflow`/`WebRtcPublisher`; see
+  [LAN mode](lan-mode.md).
 
 Capability project references establish dependency direction: Signaling depends on Core for configuration and user-scoped tokens, while Audio remains independently testable and WebRtc remains an isolated placeholder until its requirements are implemented.
 

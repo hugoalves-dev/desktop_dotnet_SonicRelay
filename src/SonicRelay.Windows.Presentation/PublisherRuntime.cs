@@ -61,6 +61,9 @@ public sealed class PublisherRuntime : IAsyncDisposable
         Lan = lan;
         Sessions = sessions;
         this.cloud = cloud;
+        // One QR for both transports: the LAN block always, the cloud challenge when one is open.
+        LanPairing = new LanPairingViewModel(lan, new PairingQrCodeService(), () =>
+            Pairing?.Challenge is { } challenge ? new Lan.Pairing.CloudPairingBlock(challenge.ChallengeId, challenge.Code) : null);
         this.networkAvailability = networkAvailability;
         this.resourceUsageSampler = resourceUsageSampler;
         this.httpClient = httpClient;
@@ -103,6 +106,9 @@ public sealed class PublisherRuntime : IAsyncDisposable
     public SessionHostRouter Sessions { get; }
 
     public ConnectivityPreferenceStore Connectivity => Lan.Connectivity;
+
+    /// <summary>Offline pairing surface (QR v2, manual code, LAN-paired phones).</summary>
+    public LanPairingViewModel LanPairing { get; }
 
     /// <summary>Whether this device holds a working cloud identity (false offline or in lanOnly).</summary>
     public bool CloudAvailable => cloud.IdentityReady;
@@ -449,6 +455,7 @@ public sealed class PublisherRuntime : IAsyncDisposable
         // disposed device.
         if (playback is not null) await playback.DisposeAsync();
         await webRtcPublisher.DisposeAsync();
+        LanPairing.Dispose();
         await Lan.DisposeAsync();
         await resourceUsageSampler.DisposeAsync();
         deviceIdentitySession.Dispose();

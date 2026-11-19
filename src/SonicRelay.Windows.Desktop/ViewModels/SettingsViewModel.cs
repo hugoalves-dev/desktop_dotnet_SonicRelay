@@ -78,6 +78,11 @@ public sealed class SettingsViewModel : ViewModelBase
     }
 
     public bool IsConnected { get; }
+
+    /// <summary>The LAN/cloud connectivity card (issue #75); null without a runtime.</summary>
+    public ConnectivitySettingsViewModel? Connectivity { get; init; }
+
+    public bool HasConnectivity => Connectivity is not null;
     public string BackendUrl { get; } = "—";
     public IReadOnlyList<AudioQualityProfile> Profiles { get; } = AudioQualityProfile.Presets;
 

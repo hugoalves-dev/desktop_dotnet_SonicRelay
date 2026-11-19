@@ -24,6 +24,14 @@ Use this checklist for every feature, dependency, packaging, and release decisio
 - [ ] The selected audio-capture path works through user-mode Windows APIs available to a standard user.
 - [ ] Installation and the primary publish flow have been tested using a standard, non-elevated Windows account.
 
+## Inbound local listener (issue #75)
+
+- The LAN listener (Kestrel) binds as the current user on an automatic or user-chosen port ≥ 1024;
+  no URL ACL, certificate store binding, service or elevation.
+- SonicRelay never creates firewall rules. The OS prompt on first listen is the user's choice;
+  managed networks use a fixed port and an administrator-owned rule ([LAN mode](lan-mode.md)).
+- It is off in `cloudOnly`, limited to 16 connections, and stops with the app.
+
 ## Known risks to validate
 
 - **WinUI 3 packaging:** MSIX deployment policy or certificate requirements can be restricted on managed machines. Do not make machine-wide MSIX installation or sideloading policy changes a prerequisite; retain an unpackaged or per-user path.
