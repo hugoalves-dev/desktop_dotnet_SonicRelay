@@ -9,7 +9,7 @@ using SonicRelay.Windows.WebRtc;
 
 namespace SonicRelay.Windows.Presentation;
 
-public sealed class PublisherWorkflow : IAsyncDisposable
+public sealed class PublisherWorkflow : IAsyncDisposable, IPublisherSessionControl
 {
     private readonly ISessionApiClient sessions;
     private readonly ISignalingClient signaling;
