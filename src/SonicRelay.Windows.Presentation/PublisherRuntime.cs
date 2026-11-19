@@ -202,7 +202,8 @@ public sealed class PublisherRuntime : IAsyncDisposable
             lan.Hub,
             () => lan.Connectivity.Mode,
             () => cloud.IdentityReady && networkAvailability.IsAvailable,
-            log: message => LogLan(diagnosticLog, message));
+            log: message => LogLan(diagnosticLog, message),
+            ensureCloud: token => cloud.Recover?.Invoke(token) ?? Task.FromResult(false));
         // ICE servers (including short-lived TURN credentials) come from the
         // backend, which serves the SonicRelay coturn deployment. The public
         // Google STUN fallback is a debug-build-only convenience for when the
@@ -268,7 +269,7 @@ public sealed class PublisherRuntime : IAsyncDisposable
             workflow.LogActivity("WebRTC: ICE restart requested for a reconnected viewer.");
         webRtcPublisher.PeerRebuildRequested += _ =>
             workflow.LogActivity("WebRTC: rebuilding peer connection after repeated ICE restart failures.");
-        return new PublisherRuntime(
+        var runtime = new PublisherRuntime(
             http,
             workflow,
             normalized,
@@ -287,6 +288,29 @@ public sealed class PublisherRuntime : IAsyncDisposable
             lan,
             sessions,
             cloud);
+        // An `auto` start without RelayControl leaves the cloud unusable; this lets the next
+        // session bring it back once the API answers, without restarting the app.
+        cloud.Recover = async token =>
+        {
+            if (cloud.IdentityReady) return true;
+            if (!networkAvailability.IsAvailable) return false;
+            await deviceIdentitySession.GetAccessTokenAsync(cancellationToken: token).ConfigureAwait(false);
+            var stored = await credentialStore.LoadAsync(token).ConfigureAwait(false);
+            if (!stored.Succeeded || stored.Credential is null) return false;
+            runtime.OnCloudRecovered(stored.Credential.DeviceId);
+            return true;
+        };
+        return runtime;
+    }
+
+    private void OnCloudRecovered(Guid cloudDeviceId)
+    {
+        cloud.IdentityReady = true;
+        LogLan(DiagnosticLog, "RelayControl is reachable again; new sessions include the cloud.");
+        SetPairing(new PairingViewModel(
+            new PairingApiClient(httpClient, deviceIdentitySession, () => deviceIdentitySession.CurrentDeviceId),
+            new PairingQrCodeService(),
+            cloudDeviceId));
     }
 
     /// <summary>
@@ -469,4 +493,7 @@ public sealed class PublisherRuntime : IAsyncDisposable
 public sealed class CloudAvailability
 {
     public bool IdentityReady { get; set; }
+
+    /// <summary>Tries to restore a cloud identity that was unavailable; true when usable.</summary>
+    public Func<CancellationToken, Task<bool>>? Recover { get; set; }
 }

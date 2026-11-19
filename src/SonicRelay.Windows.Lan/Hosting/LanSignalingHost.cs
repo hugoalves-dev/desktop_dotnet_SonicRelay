@@ -35,6 +35,7 @@ public sealed class LanSignalingHost(
     public const string DeviceHeader = "X-SonicRelay-Device";
     private const int MaxPairBodyBytes = 4 * 1024;
     private const int MaxFieldLength = 128;
+    private static readonly TimeSpan RejectCloseTimeout = TimeSpan.FromSeconds(2);
 
     private readonly AttemptLimiter limiter = new(time ?? TimeProvider.System);
     private readonly SemaphoreSlim lifecycle = new(1, 1);
@@ -236,10 +237,22 @@ public sealed class LanSignalingHost(
             var revoked = trust.Devices.Any(known => known.ViewerDeviceId == viewerId && known.Revoked);
             if (!revoked) limiter.RecordFailure(remote);
             log?.Invoke(revoked ? "lan.revoked: a revoked device tried to connect." : "LAN signaling rejected: bad credential.");
-            await socket.CloseAsync(
-                revoked ? LanCloseCodes.Revoked : LanCloseCodes.Unauthorized,
-                revoked ? "revoked" : "unauthorized",
-                context.RequestAborted).ConfigureAwait(false);
+            // Send the close frame without waiting for an untrusted peer to answer it: a client
+            // that never acknowledges must not keep an upgraded-connection slot.
+            using var closeTimeout = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
+            closeTimeout.CancelAfter(RejectCloseTimeout);
+            try
+            {
+                await socket.CloseOutputAsync(
+                    revoked ? LanCloseCodes.Revoked : LanCloseCodes.Unauthorized,
+                    revoked ? "revoked" : "unauthorized",
+                    closeTimeout.Token).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is OperationCanceledException or System.Net.WebSockets.WebSocketException or IOException)
+            {
+                // The socket is disposed on return either way.
+            }
+
             return;
         }
 

@@ -288,6 +288,30 @@ public sealed class LanSignalingHubTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task HandlerSendingDuringDispatch_DoesNotDeadlock()
+    {
+        // WebRtcPublisher declares its capabilities from inside its own session.joined handler.
+        LanSignalingHub? reentrant = null;
+        var replying = new ReplyingHandler(async () =>
+            await reentrant!.SendAsync(new SignalingMessageEnvelope(
+                SignalingMessageTypes.ParticipantCapabilities, SessionId,
+                Payload: Json.Of(new { canSendAudio = true, canReceiveAudio = true }))));
+        reentrant = new LanSignalingHub([replying, handler], trust, PublisherId, time);
+        reentrant.SessionMode = "duplex";
+
+        await reentrant.ConnectAsync(SessionId).WaitAsync(TimeSpan.FromSeconds(5));
+
+        handler.Next(SignalingMessageTypes.ParticipantCapabilities, PublisherId);
+        await reentrant.DisposeAsync();
+    }
+
+    private sealed class ReplyingHandler(Func<Task> onSelfJoin) : ISignalingMessageHandler
+    {
+        public Task HandleAsync(SignalingMessageEnvelope message, CancellationToken cancellationToken = default) =>
+            message.Type == SignalingMessageTypes.SessionJoined && message.From is null ? onSelfJoin() : Task.CompletedTask;
+    }
+
+    [Fact]
     public async Task OversizedMessage_ClosesWith1009()
     {
         await StartSessionAsync();

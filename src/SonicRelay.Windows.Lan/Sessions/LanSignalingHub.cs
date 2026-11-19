@@ -38,6 +38,11 @@ public sealed class LanSignalingHub : ISignalingClient, ILanConnectionSink
     private readonly LanTrustStore trust;
     private readonly object gate = new();
     private readonly SemaphoreSlim dispatchLock = new(1, 1);
+
+    // Set while handlers run. A handler that sends (WebRtcPublisher declaring its capabilities
+    // from inside its own session.joined) re-enters DispatchAsync on the same async flow; that
+    // nested dispatch must run inline instead of waiting on the lock its caller holds.
+    private readonly AsyncLocal<bool> insideDispatch = new();
     private readonly Dictionary<string, ViewerSlot> viewers = new(StringComparer.Ordinal);
     private string? sessionId;
     private bool publisherCanSend = true;
@@ -494,24 +499,37 @@ public sealed class LanSignalingHub : ISignalingClient, ILanConnectionSink
 
     private async Task DispatchAsync(SignalingMessageEnvelope message, CancellationToken cancellationToken)
     {
+        if (insideDispatch.Value)
+        {
+            await InvokeHandlersAsync(message, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         await dispatchLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            foreach (var handler in handlers)
-            {
-                try
-                {
-                    await handler.HandleAsync(message, cancellationToken).ConfigureAwait(false);
-                }
-                catch (Exception exception) when (exception is not OperationCanceledException)
-                {
-                    log?.Invoke($"LAN signaling handler failed on {message.Type}: {exception.Message}");
-                }
-            }
+            insideDispatch.Value = true;
+            await InvokeHandlersAsync(message, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
+            insideDispatch.Value = false;
             dispatchLock.Release();
+        }
+    }
+
+    private async Task InvokeHandlersAsync(SignalingMessageEnvelope message, CancellationToken cancellationToken)
+    {
+        foreach (var handler in handlers)
+        {
+            try
+            {
+                await handler.HandleAsync(message, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                log?.Invoke($"LAN signaling handler failed on {message.Type}: {exception.Message}");
+            }
         }
     }
 

@@ -196,6 +196,41 @@ public sealed class LanSignalingHostTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RejectedClientsThatIgnoreTheClose_DoNotExhaustTheListener()
+    {
+        var revokedCredential = await trust.AddAsync("revoked-phone", "Old", "android");
+        await trust.RevokeAsync("revoked-phone");
+        var good = await trust.AddAsync("viewer-ok", "Pixel", "android");
+        var stalled = new List<System.Net.Security.SslStream>();
+        for (var i = 0; i < 16; i++)
+            stalled.Add(await OpenSilentUpgradeAsync("revoked-phone", revokedCredential));
+
+        using var socket = await ConnectAsync("viewer-ok", good).WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal("viewer-ok", (await sink.WaitAsync()).ViewerDeviceId);
+        foreach (var stream in stalled) await stream.DisposeAsync();
+    }
+
+    /// <summary>A WebSocket upgrade that never reads again — so it never answers a close frame.</summary>
+    private async Task<System.Net.Security.SslStream> OpenSilentUpgradeAsync(string viewer, string credential)
+    {
+        var tcp = new TcpClient();
+        await tcp.ConnectAsync(IPAddress.Loopback, host.Port!.Value);
+        var tls = new System.Net.Security.SslStream(tcp.GetStream(), false, (_, _, _, _) => true);
+        await tls.AuthenticateAsClientAsync("127.0.0.1");
+        var key = Convert.ToBase64String(Guid.NewGuid().ToByteArray());
+        var request = string.Join("\r\n",
+            "GET /lan/v1/signaling HTTP/1.1", "Host: 127.0.0.1", "Upgrade: websocket", "Connection: Upgrade",
+            $"Sec-WebSocket-Key: {key}", "Sec-WebSocket-Version: 13",
+            $"Authorization: SonicRelay-Lan {credential}", $"X-SonicRelay-Device: {viewer}", "", "");
+        await tls.WriteAsync(System.Text.Encoding.ASCII.GetBytes(request));
+        var buffer = new byte[1024];
+        var read = await tls.ReadAsync(buffer);
+        Assert.Contains("101", System.Text.Encoding.ASCII.GetString(buffer, 0, read));
+        return tls;
+    }
+
+    [Fact]
     public async Task UnknownPath_404()
     {
         using var client = Client();

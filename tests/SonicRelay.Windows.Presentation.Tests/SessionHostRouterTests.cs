@@ -19,13 +19,21 @@ public sealed class SessionHostRouterTests : IAsyncLifetime
     private LanSignalingHub hub = null!;
     private string mode = ConnectivityModes.Auto;
     private bool cloudUsable = true;
+    private int recoveries;
+    private bool recoverySucceeds;
     private SessionHostRouter router = null!;
 
     public Task InitializeAsync()
     {
         hub = new LanSignalingHub([], new LanTrustStore(new NullProtector(), trustPath), PublisherId.ToString("D"));
         router = new SessionHostRouter(cloud, cloudSignaling, new LanSessionApiClient(hub, PublisherId), hub,
-            () => mode, () => cloudUsable, TimeSpan.FromMilliseconds(500));
+            () => mode, () => cloudUsable, TimeSpan.FromMilliseconds(500),
+            ensureCloud: _ =>
+            {
+                recoveries++;
+                if (recoverySucceeds) cloudUsable = true;
+                return Task.FromResult(recoverySucceeds);
+            });
         return Task.CompletedTask;
     }
 
@@ -72,6 +80,40 @@ public sealed class SessionHostRouterTests : IAsyncLifetime
 
         Assert.Equal("LAN", session.Code);
         Assert.Equal(SessionHostKind.Lan, router.ActiveKind);
+    }
+
+    [Fact]
+    public async Task Auto_AfterOfflineStart_RecoversTheCloudForTheNextSession()
+    {
+        cloudUsable = false;
+        recoverySucceeds = true;
+
+        await router.CreateSessionAsync(new CreateSessionRequest());
+
+        Assert.Equal(1, recoveries);
+        Assert.Equal(SessionHostKind.Dual, router.ActiveKind);
+    }
+
+    [Fact]
+    public async Task Auto_CloudStillDown_StaysLanOnly()
+    {
+        cloudUsable = false;
+        recoverySucceeds = false;
+
+        await router.CreateSessionAsync(new CreateSessionRequest());
+
+        Assert.Equal(SessionHostKind.Lan, router.ActiveKind);
+    }
+
+    [Fact]
+    public async Task LanOnly_NeverTriesToRecoverTheCloud()
+    {
+        mode = ConnectivityModes.LanOnly;
+        cloudUsable = false;
+
+        await router.CreateSessionAsync(new CreateSessionRequest());
+
+        Assert.Equal(0, recoveries);
     }
 
     [Fact]

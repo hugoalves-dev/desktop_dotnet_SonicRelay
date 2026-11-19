@@ -23,6 +23,10 @@ public sealed class SessionHostRouter : ISessionApiClient, ISignalingClient
     private readonly Func<bool> cloudUsable;
     private readonly TimeSpan cloudTimeout;
     private readonly Action<string>? log;
+
+    // Restores a cloud identity that was unavailable at startup, so `auto` recovers the cloud
+    // without a restart once RelayControl answers again.
+    private readonly Func<CancellationToken, Task<bool>>? ensureCloud;
     private SignalingConnectionState state = SignalingConnectionState.Disconnected;
 
     public SessionHostRouter(
@@ -33,8 +37,10 @@ public sealed class SessionHostRouter : ISessionApiClient, ISignalingClient
         Func<string> connectivityMode,
         Func<bool> cloudUsable,
         TimeSpan? cloudTimeout = null,
-        Action<string>? log = null)
+        Action<string>? log = null,
+        Func<CancellationToken, Task<bool>>? ensureCloud = null)
     {
+        this.ensureCloud = ensureCloud;
         this.cloudSessions = cloudSessions ?? throw new ArgumentNullException(nameof(cloudSessions));
         this.cloudSignaling = cloudSignaling ?? throw new ArgumentNullException(nameof(cloudSignaling));
         this.lanSessions = lanSessions ?? throw new ArgumentNullException(nameof(lanSessions));
@@ -70,7 +76,10 @@ public sealed class SessionHostRouter : ISessionApiClient, ISignalingClient
 
     public async Task<StreamSessionResponse> CreateSessionAsync(CreateSessionRequest request, CancellationToken cancellationToken = default)
     {
-        var kind = SessionHostSelector.Select(connectivityMode(), cloudUsable());
+        var mode = connectivityMode();
+        var usable = cloudUsable()
+            || (mode == ConnectivityModes.Auto && await TryEnsureCloudAsync(cancellationToken).ConfigureAwait(false));
+        var kind = SessionHostSelector.Select(mode, usable);
         switch (kind)
         {
             case SessionHostKind.Cloud:
@@ -245,6 +254,22 @@ public sealed class SessionHostRouter : ISessionApiClient, ISignalingClient
         {
             log?.Invoke($"cloud.unavailable: {exception.Message}");
             return null;
+        }
+    }
+
+    private async Task<bool> TryEnsureCloudAsync(CancellationToken cancellationToken)
+    {
+        if (ensureCloud is null) return false;
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(cloudTimeout);
+        try
+        {
+            return await ensureCloud(timeout.Token).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (IsCloudFailure(exception, cancellationToken))
+        {
+            log?.Invoke($"cloud.unavailable: {exception.Message}");
+            return false;
         }
     }
 
