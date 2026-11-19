@@ -49,7 +49,11 @@ The backend expires a **waiting** session (no viewer yet) once its code TTL pass
 - If the session disappears without the user ending it (signaling `SessionGone` /
   `SessionEnded`), create a new one after a delay with backoff 5 s, 30 s, 2 min, then
   every 5 min; a success resets the backoff. No tight loops.
-- If the user clicks **End session**, nothing is recreated until the next launch.
+- If the user clicks **End session**, or unpairs / loses the device identity, nothing is
+recreated until the next launch (a reset device must never start capturing by itself).
+
+On Linux an AppImage runs from a temporary mount, so launch-at-login registers the
+`APPIMAGE` path when it is set.
 
 ## Non-goals
 
